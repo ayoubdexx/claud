@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+_smoke.*
+_validate.py
+_inspect.py
