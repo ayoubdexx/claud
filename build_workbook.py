@@ -765,7 +765,7 @@ R_FIRST = RHDR + 1                    # 4
 for idx in range(ATT_ROWS):
     rr = R_FIRST + idx
     ar = A_FIRST + idx
-    rep.write(rr, 1, None, S["r_seq"], formula=f'IF($B{rr}="","",SUMPRODUCT(--($B${R_FIRST}:$B{rr}<>"")))')
+    rep.write(rr, 1, None, S["r_seq"], formula=f'IF($B{rr}="","",ROW()-{R_FIRST}+1)')
     rep.write(rr, 2, None, S["f_id"],  formula=f'IF({ATT}A{ar}="","",{ATT}A{ar})')
     rep.write(rr, 3, None, S["f_txt"], formula=f'IF($B{rr}="","",{ATT}B{ar})')
     rep.write(rr, 4, None, S["f_ctr"], formula=f'IF($B{rr}="","",{ATT}C{ar})')
