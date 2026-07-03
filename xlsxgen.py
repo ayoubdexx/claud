@@ -320,6 +320,12 @@ class Sheet:
         self.default_row_height: float | None = None
         self.drawing_rid: str | None = None
         self.tab_color: str | None = None
+        self.tables: list["Table"] = []
+        self.table_rids: list[str] = []
+
+    def add_table(self, table: "Table"):
+        self.tables.append(table)
+        return table
 
     # -- writing cells ----------------------------------------------------- #
     def write(self, row: int, col: int, value=None, style: int = 0, formula: str | None = None):
@@ -511,6 +517,13 @@ class Sheet:
         if self.drawing_rid:
             drawing_xml = f'<drawing r:id="{self.drawing_rid}"/>'
 
+        # tableParts (must come after the drawing element per the schema)
+        table_parts_xml = ""
+        if self.table_rids:
+            items = "".join(f'<tablePart r:id="{rid}"/>' for rid in self.table_rids)
+            table_parts_xml = (f'<tableParts count="{len(self.table_rids)}">'
+                               + items + "</tableParts>")
+
         return (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
@@ -518,7 +531,7 @@ class Sheet:
             + sheet_pr + dimension + sheet_views + sheet_format + cols_xml
             + sheet_data + protection + merge_xml + cond_xml + dv_xml
             + '<printOptions horizontalCentered="1"/>'
-            + page_margins + page_setup + drawing_xml
+            + page_margins + page_setup + drawing_xml + table_parts_xml
             + "</worksheet>"
         )
 
@@ -625,6 +638,52 @@ class Chart:
 
 
 # --------------------------------------------------------------------------- #
+#  Excel Table object (Ctrl+T) - enables structured references & auto-expand
+# --------------------------------------------------------------------------- #
+class Table:
+    """A native Excel table.
+
+    name        : table name / displayName (no spaces, must start with a letter)
+    ref         : full range including the header row, e.g. "A3:H53"
+    columns     : list of header strings (must match the header-row cell text)
+    style       : built-in table style name, or None for no table styling
+                  (None lets explicitly-applied cell formatting show through)
+    show_row_stripes : banding when a style is set
+    """
+
+    def __init__(self, name: str, ref: str, columns: list[str],
+                 style: str | None = None, show_row_stripes: bool = True):
+        self.name = name
+        self.ref = ref
+        self.columns = columns
+        self.style = style
+        self.show_row_stripes = show_row_stripes
+        self.id: int | None = None   # assigned by Workbook.save()
+
+    def render(self) -> str:
+        cols = "".join(
+            f'<tableColumn id="{i}" name="{_escattr(c)}"/>'
+            for i, c in enumerate(self.columns, start=1)
+        )
+        style_xml = ""
+        if self.style:
+            style_xml = (
+                f'<tableStyleInfo name="{self.style}" showFirstColumn="0" '
+                f'showLastColumn="0" showRowStripes="{1 if self.show_row_stripes else 0}" '
+                f'showColumnStripes="0"/>'
+            )
+        return (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            f'id="{self.id}" name="{_escattr(self.name)}" '
+            f'displayName="{_escattr(self.name)}" ref="{self.ref}" totalsRowShown="0">'
+            f'<autoFilter ref="{self.ref}"/>'
+            f'<tableColumns count="{len(self.columns)}">{cols}</tableColumns>'
+            f'{style_xml}</table>'
+        )
+
+
+# --------------------------------------------------------------------------- #
 #  Workbook
 # --------------------------------------------------------------------------- #
 class Workbook:
@@ -672,6 +731,18 @@ class Workbook:
         for si, charts in sheet_charts.items():
             self.sheets[si].drawing_rid = "rId1"
 
+        # assign table ids (unique across the workbook) and per-sheet rels.
+        # rId1 is reserved for the drawing when a sheet also owns charts.
+        global_table_id = 0
+        for s in self.sheets:
+            s.table_rids = []
+            rid_n = 2 if s.drawing_rid else 1
+            for t in s.tables:
+                global_table_id += 1
+                t.id = global_table_id
+                s.table_rids.append(f"rId{rid_n}")
+                rid_n += 1
+
         parts: dict[str, str] = {}
 
         # [Content_Types].xml
@@ -698,19 +769,15 @@ class Workbook:
         for i, s in enumerate(self.sheets, start=1):
             parts[f"xl/worksheets/sheet{i}.xml"] = s.render()
 
+        # table parts
+        for s in self.sheets:
+            for t in s.tables:
+                parts[f"xl/tables/table{t.id}.xml"] = t.render()
+
         # drawings + charts
         chart_counter = 0
         for si, charts in sheet_charts.items():
-            sheet_no = si + 1
             drawing_no = si + 1
-            # sheet rels -> drawing
-            parts[f"xl/worksheets/_rels/sheet{sheet_no}.xml.rels"] = (
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                f'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing{drawing_no}.xml"/>'
-                "</Relationships>"
-            )
-            # drawing xml + rels
             anchors = []
             drawing_rels = []
             for j, ch in enumerate(charts, start=1):
@@ -733,6 +800,29 @@ class Workbook:
                 '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
                 + "".join(drawing_rels) + "</Relationships>"
             )
+
+        # unified worksheet rels (drawing + tables) for every sheet that needs them
+        for i, s in enumerate(self.sheets, start=1):
+            rels = []
+            if s.drawing_rid:
+                drawing_no = i  # drawing{sheet_index}.xml
+                rels.append(
+                    f'<Relationship Id="{s.drawing_rid}" '
+                    'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" '
+                    f'Target="../drawings/drawing{drawing_no}.xml"/>'
+                )
+            for rid, t in zip(s.table_rids, s.tables):
+                rels.append(
+                    f'<Relationship Id="{rid}" '
+                    'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" '
+                    f'Target="../tables/table{t.id}.xml"/>'
+                )
+            if rels:
+                parts[f"xl/worksheets/_rels/sheet{i}.xml.rels"] = (
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    + "".join(rels) + "</Relationships>"
+                )
 
         # write the zip
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
@@ -783,6 +873,12 @@ class Workbook:
                 overrides.append(
                     f'<Override PartName="/xl/charts/chart{chart_counter}.xml" '
                     'ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>'
+                )
+        for s in self.sheets:
+            for t in s.tables:
+                overrides.append(
+                    f'<Override PartName="/xl/tables/table{t.id}.xml" '
+                    'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>'
                 )
         return (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
