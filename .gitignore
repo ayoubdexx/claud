@@ -4,3 +4,8 @@ __pycache__/
 _smoke.*
 _validate.py
 _inspect.py
+
+_vba_work/
+systeme_presence/_tmp_build.xlsx
+systeme_presence/_test.xlsm
+systeme_presence/vbaProject.bin
