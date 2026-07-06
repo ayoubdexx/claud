@@ -94,7 +94,7 @@ def register_styles(wb: Workbook) -> dict:
     s["kpi_label"] = wb.style({"font": {"bold": True, "size": 11, "color": INK},
                                "fill": LABEL_BG, "border": _bd(),
                                "align": {"horizontal": "left", "vertical": "center"}})
-    s["kpi_value"] = wb.style({"font": {"bold": True, "size": 18, "color": GREEN_TX},
+    s["kpi_value"] = wb.style({"font": {"bold": True, "size": 16, "color": INK},
                                "fill": WHITE, "border": _bd(),
                                "align": {"horizontal": "center", "vertical": "center"}})
     # data cells
@@ -129,6 +129,7 @@ def register_styles(wb: Workbook) -> dict:
 def register_dxf(wb: Workbook) -> dict:
     d = {}
     d["present"] = wb.dxf({"fill": GREEN_LT, "font": {"bold": True, "color": GREEN_TX}})
+    d["absent"] = wb.dxf({"fill": RED_LT, "font": {"bold": True, "color": RED_TX}})
     d["band"] = wb.dxf({"fill": BAND})
     d["actif"] = wb.dxf({"fill": GREEN_LT, "font": {"bold": True, "color": GREEN_TX}})
     d["inactif"] = wb.dxf({"fill": RED_LT, "font": {"bold": True, "color": RED_TX}})
@@ -165,19 +166,23 @@ def build_presence(wb, S, D):
     sh.cell("E3", "", S["text_in"])
     sh.set_row(3, 24)
 
-    # KPI: présents cochés
-    sh.merge("B4:C4"); sh.cell("B4", "Présents cochés :", S["kpi_label"]); sh.cell("C4", "", S["kpi_label"])
+    # KPI: présents / absents
+    sh.merge("B4:C4"); sh.cell("B4", "Présents / Absents :", S["kpi_label"]); sh.cell("C4", "", S["kpi_label"])
     sh.merge("D4:E4")
-    sh.cell("D4", None, S["kpi_value"], formula='COUNTA(B7:B%d)&"  /  "&COUNTA(C7:C%d)' % (PRESENCE_MAX, PRESENCE_MAX))
+    kpi = ('UNICHAR(10003)&" "&COUNTIF(B7:B%d,UNICHAR(10003))&"      "'
+           '&UNICHAR(10007)&" "&COUNTIF(B7:B%d,UNICHAR(10007))&"      /  "'
+           '&COUNTA(C7:C%d)') % (PRESENCE_MAX, PRESENCE_MAX, PRESENCE_MAX)
+    sh.cell("D4", None, S["kpi_value"], formula=kpi)
     sh.cell("E4", "", S["kpi_value"])
     sh.set_row(4, 28)
 
     sh.merge("B5:E5")
-    sh.cell("B5", "Astuce : double-cliquez dans la colonne « Présent » pour cocher (✓) un employé.", S["hint"])
+    sh.cell("B5", "Astuce : double-cliquez dans la colonne « Présence » — 1 clic = ✓ présent, "
+                  "2 clics = ✗ absent, 3 clics = effacer.", S["hint"])
     sh.set_row(5, 18)
 
     # header row 6
-    sh.cell("B6", "Présent", S["header"])
+    sh.cell("B6", "Présence", S["header"])
     sh.cell("C6", "ID", S["header"])
     sh.cell("D6", "Nom et Prénom", S["header"])
     sh.cell("E6", "Poste", S["header"])
@@ -199,8 +204,9 @@ def build_presence(wb, S, D):
             sh.write(r, 5, None, S["poste"])
 
     rng = f"B7:E{PRESENCE_MAX}"
-    sh.add_cond_expr(rng, "LEN($B7)>0", D["present"], priority=1)
-    sh.add_cond_expr(rng, "MOD(ROW(),2)=0", D["band"], priority=2)
+    sh.add_cond_expr(rng, "$B7=UNICHAR(10003)", D["present"], priority=1)   # ✓ présent
+    sh.add_cond_expr(rng, "$B7=UNICHAR(10007)", D["absent"], priority=2)    # ✗ absent
+    sh.add_cond_expr(rng, "MOD(ROW(),2)=0", D["band"], priority=3)
     return sh
 
 
@@ -312,8 +318,8 @@ def build_historique(wb, S, D):
         sh.write(r, 4, None, S["nom"])
         sh.write(r, 5, None, S["cell_c"])
 
-    sh.add_cond_cellis(f"E4:E{HIST_MAX}", "equal", '"Oui"', D["oui"], priority=1)
-    sh.add_cond_cellis(f"E4:E{HIST_MAX}", "equal", '"Non"', D["non"], priority=2)
+    sh.add_cond_cellis(f"E4:E{HIST_MAX}", "equal", '"Présent"', D["oui"], priority=1)
+    sh.add_cond_cellis(f"E4:E{HIST_MAX}", "equal", '"Absent"', D["non"], priority=2)
     sh.add_cond_expr(f"B4:E{HIST_MAX}", "MOD(ROW(),2)=0", D["band"], priority=3)
     return sh
 
@@ -415,6 +421,10 @@ MODPRESENCE_CODE = (
     "    Coche = ChrW(10003)\n"
     "End Function\n"
     "\n"
+    "Public Function Croix() As String\n"
+    "    Croix = ChrW(10007)\n"
+    "End Function\n"
+    "\n"
     "' Lancé à l'ouverture du classeur.\n"
     "Public Sub InitialiserOutil()\n"
     "    On Error Resume Next\n"
@@ -496,11 +506,11 @@ MODPRESENCE_CODE = (
     "    wsP.Activate\n"
     "    Application.Goto wsP.Range(CELL_DATE), False\n"
     '    MsgBox "Nouvelle journée prête pour le " & Format$(Date, "dd/mm/yyyy") & "." & vbCrLf & vbCrLf & _\n'
-    '        "Double-cliquez dans la colonne « Présent » pour cocher les employés présents.", _\n'
+    '        "Double-cliquez dans la colonne « Présence » : 1 clic = présent, 2 clics = absent, 3 clics = effacer.", _\n'
     '        vbInformation, "Présence du Jour"\n'
     "End Sub\n"
     "\n"
-    "' Double-clic dans la colonne Présent : coche / décoche.\n"
+    "' Double-clic dans la colonne Présence : cycle présent / absent / effacer.\n"
     "Public Sub BasculerPresence(ByVal Target As Range, ByRef Cancel As Boolean)\n"
     "    Dim wsP As Worksheet\n"
     "    Set wsP = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
@@ -508,7 +518,11 @@ MODPRESENCE_CODE = (
     "    If Target.Row < P_DATA Or Target.Row > P_MAX Then Exit Sub\n"
     '    If Trim$(CStr(wsP.Cells(Target.Row, P_ID).Value)) = "" Then Exit Sub\n'
     "    Cancel = True\n"
-    "    If Trim$(CStr(Target.Value)) = Coche() Then\n"
+    "    Dim v As String\n"
+    "    v = Trim$(CStr(Target.Value))\n"
+    "    If v = Coche() Then\n"
+    "        Target.Value = Croix()\n"
+    "    ElseIf v = Croix() Then\n"
     "        Target.ClearContents\n"
     "    Else\n"
     "        Target.Value = Coche()\n"
@@ -544,17 +558,23 @@ MODPRESENCE_CODE = (
     "    Else\n"
     "        dst = lastH + 1\n"
     "    End If\n"
-    "    Dim r As Long, total As Long, presents As Long\n"
-    "    Dim estPresent As Boolean\n"
+    "    Dim r As Long, total As Long, presents As Long, absents As Long\n"
+    "    Dim marque As String, statut As String\n"
     "    For r = P_DATA To lastP\n"
     '        If Trim$(CStr(wsP.Cells(r, P_ID).Value)) <> "" Then\n'
-    "            estPresent = (Trim$(CStr(wsP.Cells(r, P_CHECK).Value)) = Coche())\n"
+    "            marque = Trim$(CStr(wsP.Cells(r, P_CHECK).Value))\n"
+    "            If marque = Coche() Then\n"
+    '                statut = "Présent": presents = presents + 1\n'
+    "            ElseIf marque = Croix() Then\n"
+    '                statut = "Absent": absents = absents + 1\n'
+    "            Else\n"
+    '                statut = "Non marqué"\n'
+    "            End If\n"
     "            wsH.Cells(dst, H_DATE).Value = d\n"
     '            wsH.Cells(dst, H_DATE).NumberFormat = "dd/mm/yyyy"\n'
     "            wsH.Cells(dst, H_ID).Value = wsP.Cells(r, P_ID).Value\n"
     "            wsH.Cells(dst, H_NOM).Value = wsP.Cells(r, P_NOM).Value\n"
-    '            wsH.Cells(dst, H_PRESENT).Value = IIf(estPresent, "Oui", "Non")\n'
-    "            If estPresent Then presents = presents + 1\n"
+    "            wsH.Cells(dst, H_PRESENT).Value = statut\n"
     "            total = total + 1\n"
     "            dst = dst + 1\n"
     "        End If\n"
@@ -562,7 +582,7 @@ MODPRESENCE_CODE = (
     "    ConstruireListeImpression\n"
     "    Application.ScreenUpdating = True\n"
     '    MsgBox "Journée enregistrée : " & Format$(d, "dd/mm/yyyy") & "." & vbCrLf & vbCrLf & _\n'
-    '        presents & " présent(s) sur " & total & " employé(s)." & vbCrLf & _\n'
+    '        presents & " présent(s), " & absents & " absent(s) sur " & total & " employé(s)." & vbCrLf & _\n'
     '        "L\'historique et la liste à imprimer ont été mis à jour.", vbInformation, "Présence du Jour"\n'
     "End Sub\n"
     "\n"
