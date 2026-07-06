@@ -1,0 +1,20 @@
+# Dépendances nécessaires UNIQUEMENT pour re-générer le classeur
+# (python build_attendance.py). Le fichier .xlsm livré ne nécessite rien.
+#
+# Python 3.10+ requis (la chaîne VBA utilise la syntaxe « str | None »).
+#
+#   pip install -r requirements-build.txt
+#
+# Il faut également le paquet « ms_ovba » (Beakerboy/vbaProject-Compiler)
+# placé sous _vbatools/ms_ovba, ainsi qu'un module _vbatools/ms_dtyp/filetime.py
+# fournissant une classe Filetime minimale. Voir le README.
+
+ms_cfb
+ms_ovba_compression
+ms_ovba_crypto
+python-red-black-trees
+PyYAML
+
+# Optionnel : validation
+olefile
+openpyxl

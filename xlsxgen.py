@@ -320,6 +320,9 @@ class Sheet:
         self.default_row_height: float | None = None
         self.drawing_rid: str | None = None
         self.tab_color: str | None = None
+        self.code_name: str | None = None       # VBA code-behind module name
+        self.hidden_cols: list[int] = []         # 1-based columns to hide
+        self.autofilter_ref: str | None = None   # e.g. "A3:F300"
 
     # -- writing cells ----------------------------------------------------- #
     def write(self, row: int, col: int, value=None, style: int = 0, formula: str | None = None):
@@ -396,10 +399,16 @@ class Sheet:
 
     # -- render ------------------------------------------------------------ #
     def render(self) -> str:
-        # sheetPr (tab colour)
-        sheet_pr = ""
+        # sheetPr (code name for VBA + tab colour). pageSetUpPr child added later.
+        pr_attrs = ""
+        if self.code_name:
+            pr_attrs += f' codeName="{_escattr(self.code_name)}"'
+        pr_children = ""
         if self.tab_color:
-            sheet_pr = f'<sheetPr><tabColor rgb="{self.tab_color}"/></sheetPr>'
+            pr_children += f'<tabColor rgb="{self.tab_color}"/>'
+        sheet_pr = ""
+        if pr_attrs or pr_children:
+            sheet_pr = f"<sheetPr{pr_attrs}>{pr_children}</sheetPr>"
 
         # dimension
         if self.cells:
@@ -431,7 +440,8 @@ class Sheet:
 
         # cols
         cols_xml = ""
-        colset = set(self.col_widths) | set(self.col_styles)
+        hidden = set(self.hidden_cols)
+        colset = set(self.col_widths) | set(self.col_styles) | hidden
         if colset:
             entries = []
             for c in sorted(colset):
@@ -443,6 +453,8 @@ class Sheet:
                     attrs += ' width="8.43"'
                 if c in self.col_styles:
                     attrs += f' style="{self.col_styles[c]}"'
+                if c in hidden:
+                    attrs += ' hidden="1"'
                 entries.append(f"<col {attrs}/>")
             cols_xml = "<cols>" + "".join(entries) + "</cols>"
 
@@ -468,6 +480,11 @@ class Sheet:
             protection = ('<sheetProtection sheet="1" objects="1" scenarios="1" '
                           'formatCells="0" formatColumns="0" formatRows="0" '
                           'selectLockedCells="1" selectUnlockedCells="1"/>')
+
+        # autoFilter (must appear after sheetProtection, before mergeCells)
+        autofilter_xml = ""
+        if self.autofilter_ref:
+            autofilter_xml = f'<autoFilter ref="{self.autofilter_ref}"/>'
 
         # mergeCells
         merge_xml = ""
@@ -516,7 +533,7 @@ class Sheet:
             '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
             + sheet_pr + dimension + sheet_views + sheet_format + cols_xml
-            + sheet_data + protection + merge_xml + cond_xml + dv_xml
+            + sheet_data + protection + autofilter_xml + merge_xml + cond_xml + dv_xml
             + '<printOptions horizontalCentered="1"/>'
             + page_margins + page_setup + drawing_xml
             + "</worksheet>"
@@ -625,6 +642,82 @@ class Chart:
 
 
 # --------------------------------------------------------------------------- #
+#  Shape (macro button) via drawing
+# --------------------------------------------------------------------------- #
+class Shape:
+    """A rounded-rectangle button that runs a VBA macro when clicked."""
+
+    def __init__(self, text: str, macro: str | None = None,
+                 fill: str = "FF1F3864", text_color: str = "FFFFFFFF",
+                 font_size: int = 12, bold: bool = True,
+                 preset: str = "roundRect", line_color: str | None = None,
+                 font_name: str = "Calibri"):
+        self.text = text
+        self.macro = macro
+        self.fill = fill
+        self.text_color = text_color
+        self.font_size = font_size
+        self.bold = bold
+        self.preset = preset
+        self.line_color = line_color
+        self.font_name = font_name
+        self.anchor = None            # (from_col, from_row, to_col, to_row)
+
+    @staticmethod
+    def _rgb(argb: str) -> str:
+        # DrawingML srgbClr wants RRGGBB (strip any alpha prefix).
+        return argb[-6:]
+
+    def render_anchor(self, obj_id: int) -> str:
+        a = self.anchor
+        if len(a) == 8:
+            fc, fco, fr, fro, tc, tco, tr, tro = a
+        else:
+            fc, fr, tc, tr = a
+            fco = fro = tco = tro = 0
+        ln = ('<a:ln><a:noFill/></a:ln>' if not self.line_color
+              else f'<a:ln w="12700"><a:solidFill><a:srgbClr val="{self._rgb(self.line_color)}"/>'
+                   f'</a:solidFill></a:ln>')
+        b = "1" if self.bold else "0"
+        sz = int(self.font_size * 100)
+        return (
+            '<xdr:twoCellAnchor editAs="oneCell">'
+            f'<xdr:from><xdr:col>{fc}</xdr:col><xdr:colOff>{fco}</xdr:colOff>'
+            f'<xdr:row>{fr}</xdr:row><xdr:rowOff>{fro}</xdr:rowOff></xdr:from>'
+            f'<xdr:to><xdr:col>{tc}</xdr:col><xdr:colOff>{tco}</xdr:colOff>'
+            f'<xdr:row>{tr}</xdr:row><xdr:rowOff>{tro}</xdr:rowOff></xdr:to>'
+            f'<xdr:sp macro="{_escattr(self.macro) if self.macro else ""}" textlink="">'
+            '<xdr:nvSpPr>'
+            f'<xdr:cNvPr id="{obj_id}" name="Button {obj_id}"/>'
+            '<xdr:cNvSpPr/></xdr:nvSpPr>'
+            '<xdr:spPr>'
+            '<a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>'
+            f'<a:prstGeom prst="{self.preset}"><a:avLst>'
+            '<a:gd name="adj" fmla="val 16667"/></a:avLst></a:prstGeom>'
+            f'<a:solidFill><a:srgbClr val="{self._rgb(self.fill)}"/></a:solidFill>'
+            f'{ln}</xdr:spPr>'
+            '<xdr:txBody>'
+            '<a:bodyPr vertOverflow="clip" horzOverflow="clip" wrap="square" '
+            'lIns="18000" rIns="18000" tIns="9000" bIns="9000" rtlCol="0" anchor="ctr"/>'
+            '<a:lstStyle/>'
+            + self._paragraphs(sz, b)
+            + '</xdr:txBody>'
+            '</xdr:sp><xdr:clientData/></xdr:twoCellAnchor>'
+        )
+
+    def _paragraphs(self, sz: int, b: str) -> str:
+        lines = str(self.text).split("\n") or [""]
+        rpr = (f'<a:rPr lang="fr-FR" sz="{sz}" b="{b}">'
+               f'<a:solidFill><a:srgbClr val="{self._rgb(self.text_color)}"/></a:solidFill>'
+               f'<a:latin typeface="{_escattr(self.font_name)}"/></a:rPr>')
+        out = []
+        for line in lines:
+            out.append('<a:p><a:pPr algn="ctr"/>'
+                       f'<a:r>{rpr}<a:t>{_esc(line)}</a:t></a:r></a:p>')
+        return "".join(out)
+
+
+# --------------------------------------------------------------------------- #
 #  Workbook
 # --------------------------------------------------------------------------- #
 class Workbook:
@@ -634,8 +727,11 @@ class Workbook:
         # defined names: list of (name, refers_to, local_sheet_index_or_None)
         self.defined_names: list[tuple[str, str, int | None]] = []
         self._charts: list[tuple[Sheet, Chart]] = []
+        self._shapes: list[tuple[Sheet, "Shape"]] = []
         self.title = "Payroll Management System"
         self.active_tab = 0
+        self.vba_project: bytes | None = None   # raw vbaProject.bin content
+        self.code_name = "ThisWorkbook"          # workbook VBA code-behind name
 
     def add_sheet(self, name: str) -> Sheet:
         s = Sheet(name, self.reg)
@@ -656,26 +752,43 @@ class Workbook:
         chart.anchor = anchor
         self._charts.append((sheet, chart))
 
+    def add_shape(self, sheet: Sheet, shape: "Shape", anchor):
+        """Anchor a macro-button shape. anchor = (from_col, from_row,
+        to_col, to_row) using 0-based indices."""
+        shape.anchor = anchor
+        self._shapes.append((sheet, shape))
+
+    def set_vba_project(self, data: bytes):
+        """Attach a vbaProject.bin; the workbook is saved macro-enabled."""
+        self.vba_project = data
+
     # -- assemble the package --------------------------------------------- #
     def save(self, path: str):
         # attach print areas as defined names
         for i, s in enumerate(self.sheets):
             if s.print_area:
-                ref = f"'{s.name}'!{s.print_area}"
+                quoted = s.name.replace("'", "''")   # double internal apostrophes
+                ref = f"'{quoted}'!{s.print_area}"
                 self.defined_names.append(("_xlnm.Print_Area", ref, i))
 
-        # assign drawing rels for sheets that own charts
+        # assign drawing rels for sheets that own charts and/or shapes
         sheet_charts: dict[int, list[Chart]] = {}
         for s, ch in self._charts:
             si = self.sheets.index(s)
             sheet_charts.setdefault(si, []).append(ch)
-        for si, charts in sheet_charts.items():
+        sheet_shapes: dict[int, list["Shape"]] = {}
+        for s, sp in self._shapes:
+            si = self.sheets.index(s)
+            sheet_shapes.setdefault(si, []).append(sp)
+        drawing_sheets = sorted(set(sheet_charts) | set(sheet_shapes))
+        for si in drawing_sheets:
             self.sheets[si].drawing_rid = "rId1"
 
-        parts: dict[str, str] = {}
+        parts: dict = {}
 
         # [Content_Types].xml
-        parts["[Content_Types].xml"] = self._content_types(sheet_charts)
+        parts["[Content_Types].xml"] = self._content_types(sheet_charts,
+                                                            drawing_sheets)
         # _rels/.rels
         parts["_rels/.rels"] = (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -694,15 +807,21 @@ class Workbook:
         parts["xl/_rels/workbook.xml.rels"] = self._workbook_rels()
         parts["xl/styles.xml"] = self.reg.render()
 
+        # vbaProject.bin (macro-enabled workbook)
+        if self.vba_project is not None:
+            parts["xl/vbaProject.bin"] = self.vba_project
+
         # worksheets
         for i, s in enumerate(self.sheets, start=1):
             parts[f"xl/worksheets/sheet{i}.xml"] = s.render()
 
-        # drawings + charts
+        # drawings (shapes + charts)
         chart_counter = 0
-        for si, charts in sheet_charts.items():
+        for si in drawing_sheets:
             sheet_no = si + 1
             drawing_no = si + 1
+            charts = sheet_charts.get(si, [])
+            shapes = sheet_shapes.get(si, [])
             # sheet rels -> drawing
             parts[f"xl/worksheets/_rels/sheet{sheet_no}.xml.rels"] = (
                 '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -710,14 +829,20 @@ class Workbook:
                 f'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing{drawing_no}.xml"/>'
                 "</Relationships>"
             )
-            # drawing xml + rels
             anchors = []
             drawing_rels = []
+            obj_id = 1
+            # shapes carry no relationships
+            for sp in shapes:
+                obj_id += 1
+                anchors.append(sp.render_anchor(obj_id))
+            # charts reference a chart part via a relationship
             for j, ch in enumerate(charts, start=1):
                 chart_counter += 1
                 cid = chart_counter
                 rid = f"rId{j}"
-                anchors.append(self._anchor_xml(ch, rid, j))
+                obj_id += 1
+                anchors.append(self._anchor_xml(ch, rid, obj_id))
                 drawing_rels.append(
                     f'<Relationship Id="{rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart{cid}.xml"/>'
                 )
@@ -728,16 +853,20 @@ class Workbook:
                 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
                 + "".join(anchors) + "</xdr:wsDr>"
             )
-            parts[f"xl/drawings/_rels/drawing{drawing_no}.xml.rels"] = (
-                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                + "".join(drawing_rels) + "</Relationships>"
-            )
+            if drawing_rels:
+                parts[f"xl/drawings/_rels/drawing{drawing_no}.xml.rels"] = (
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    + "".join(drawing_rels) + "</Relationships>"
+                )
 
         # write the zip
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
             for name, content in parts.items():
-                z.writestr(name, content)
+                if isinstance(content, bytes):
+                    z.writestr(name, content)
+                else:
+                    z.writestr(name, content)
 
     # -- anchor for a chart ----------------------------------------------- #
     def _anchor_xml(self, ch: Chart, rid: str, obj_id: int) -> str:
@@ -759,26 +888,35 @@ class Workbook:
         )
 
     # -- content types ---------------------------------------------------- #
-    def _content_types(self, sheet_charts) -> str:
+    def _content_types(self, sheet_charts, drawing_sheets) -> str:
+        macro = self.vba_project is not None
+        wb_ct = ("application/vnd.ms-excel.sheet.macroEnabled.main+xml" if macro
+                 else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")
         overrides = [
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+            f'<Override PartName="/xl/workbook.xml" ContentType="{wb_ct}"/>',
             '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
             '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
             '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
         ]
+        if macro:
+            overrides.append(
+                '<Override PartName="/xl/vbaProject.bin" '
+                'ContentType="application/vnd.ms-office.vbaProject"/>'
+            )
         for i in range(1, len(self.sheets) + 1):
             overrides.append(
                 f'<Override PartName="/xl/worksheets/sheet{i}.xml" '
                 'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
             )
-        chart_counter = 0
-        for si, charts in sheet_charts.items():
+        for si in drawing_sheets:
             drawing_no = si + 1
             overrides.append(
                 f'<Override PartName="/xl/drawings/drawing{drawing_no}.xml" '
                 'ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>'
             )
-            for _ in charts:
+        chart_counter = 0
+        for si in sorted(sheet_charts):
+            for _ in sheet_charts[si]:
                 chart_counter += 1
                 overrides.append(
                     f'<Override PartName="/xl/charts/chart{chart_counter}.xml" '
@@ -813,9 +951,11 @@ class Workbook:
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
             '<fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="10000"/>'
-            '<workbookPr defaultThemeVersion="166925"/>'
-            f'<bookViews><workbookView activeTab="{self.active_tab}"/></bookViews>'
-            "<sheets>" + sheets_xml + "</sheets>"
+            + (f'<workbookPr codeName="{_escattr(self.code_name)}" defaultThemeVersion="166925"/>'
+               if self.vba_project is not None
+               else '<workbookPr defaultThemeVersion="166925"/>')
+            + f'<bookViews><workbookView activeTab="{self.active_tab}"/></bookViews>'
+            + "<sheets>" + sheets_xml + "</sheets>"
             + names_xml
             + '<calcPr calcId="0" fullCalcOnLoad="1"/>'
             "</workbook>"
@@ -831,6 +971,12 @@ class Workbook:
         rels.append(f'<Relationship Id="rId{style_rid}" '
                     'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
                     'Target="styles.xml"/>')
+        if self.vba_project is not None:
+            vba_rid = style_rid + 1
+            rels.append(
+                f'<Relationship Id="rId{vba_rid}" '
+                'Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" '
+                'Target="vbaProject.bin"/>')
         return (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'

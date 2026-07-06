@@ -1,6 +1,14 @@
 .venv/
 __pycache__/
 *.pyc
+
+# VBA build toolchain (vendored / third-party) and its scratch files
+_vbatools/
+
+# temporary / smoke-test artifacts
 _smoke.*
 _validate.py
 _inspect.py
+_test.xlsm
+*.bin
+~$*
