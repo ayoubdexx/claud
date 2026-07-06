@@ -1,43 +1,47 @@
 """
-build_attendance.py - Generate a professional French daily-attendance workbook.
+build_attendance.py - Monthly attendance grid + auto daily print sheet.
 
-Produces `Gestion_Presences.xlsm`, a macro-enabled Excel tool for a construction
-company: mark present employees each morning with a double-click, save the day
-to a history log, and open a print-ready A4 attendance sheet. Built entirely
-with the standard library through xlsxgen (packaging) and vbagen (VBA project).
+Produces `Gestion_Presences.xlsm`, a macro-enabled French attendance tool for a
+construction company, built entirely with the standard library (xlsxgen for
+packaging, vbagen for the VBA project).
 
-Daily workflow (under two minutes):
-    1. Open the file (enable macros).
-    2. Double-click the "Présent" column for each employee on site.
-    3. Click "Enregistrer la journée".
-    4. Click "Imprimer la liste".
+Two synchronised sheets:
+
+  * "Présence du Mois"  - all workers (rows) x every day of the month (columns).
+    Double-click a cell to mark a worker present (green checkmark) for that day.
+    A per-worker total and a per-day total update automatically. Weekends are
+    shaded and days outside the month are greyed out.
+
+  * "Feuille du Jour"   - a print-ready A4 sheet that automatically lists the
+    workers present on the selected day (defaults to today). Change the day and
+    the list rebuilds itself; it always reflects what is marked in the grid.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 
-from xlsxgen import Workbook
+from xlsxgen import Workbook, col_letter
 from vbagen import VbaProject
 
 
 # --------------------------------------------------------------------------- #
 #  Palette (sober / modern)
 # --------------------------------------------------------------------------- #
-INK       = "FF2C3E50"   # titles / dark bars
-INK_LT    = "FF34495E"   # table headers
-WHITE     = "FFFFFFFF"
-GREEN     = "FF27AE60"
-GREEN_LT  = "FFE9F7EF"
-GREEN_TX  = "FF1E8449"
-RED_LT    = "FFFDECEA"
-RED_TX    = "FF922B21"
-BAND      = "FFF4F6F7"
-LINE      = "FFBDC3C7"
-LABEL_BG  = "FFECF0F1"
-INPUT_BG  = "FFFEF9E7"
-INPUT_TX  = "FF7D6608"
-SUB_TX    = "FF7F8C8D"
+INK        = "FF2C3E50"
+INK_LT     = "FF34495E"
+WHITE      = "FFFFFFFF"
+GREEN      = "FF27AE60"
+GREEN_LT   = "FFD5F5E3"
+GREEN_TX   = "FF1E8449"
+BAND       = "FFF4F6F7"
+LINE       = "FFBDC3C7"
+LABEL_BG   = "FFECF0F1"
+INPUT_BG   = "FFFEF9E7"
+INPUT_TX   = "FF7D6608"
+SUB_TX     = "FF7F8C8D"
+WEEKEND    = "FFEAF1F8"
+INVALID    = "FFE3E7E9"
 
 
 def _bd(color: str = LINE, style: str = "thin") -> dict:
@@ -46,281 +50,250 @@ def _bd(color: str = LINE, style: str = "thin") -> dict:
 
 
 # --------------------------------------------------------------------------- #
-#  Sample master data  (id, nom, cin, cnss, poste, equipe, statut)
+#  Sample workers  (id, nom, poste)
 # --------------------------------------------------------------------------- #
-EMPLOYES = [
-    ("EMP-001", "Youssef El Amrani", "AB123456", "145782301", "Chef de chantier", "Équipe A", "Actif"),
-    ("EMP-002", "Rachid Benali",     "AB234567", "145782302", "Maçon",            "Équipe A", "Actif"),
-    ("EMP-003", "Hassan Toumi",      "AB345678", "145782303", "Coffreur",         "Équipe A", "Actif"),
-    ("EMP-004", "Karim Idrissi",     "AB456789", "145782304", "Ferrailleur",      "Équipe B", "Actif"),
-    ("EMP-005", "Said Ouazzani",     "AB567890", "145782305", "Manœuvre",         "Équipe B", "Actif"),
-    ("EMP-006", "Mohamed Fassi",     "AB678901", "145782306", "Électricien",      "Équipe A", "Actif"),
-    ("EMP-007", "Abdellah Naciri",   "AB789012", "145782307", "Plombier",         "Équipe B", "Actif"),
-    ("EMP-008", "Omar Sabri",        "AB890123", "145782308", "Grutier",          "Équipe A", "Actif"),
-    ("EMP-009", "Brahim Alaoui",     "AB901234", "145782309", "Peintre",          "Équipe B", "Inactif"),
-    ("EMP-010", "Nabil Chraibi",     "AB012345", "145782310", "Manœuvre",         "Équipe A", "Actif"),
+WORKERS = [
+    ("EMP-001", "Youssef El Amrani", "Chef de chantier"),
+    ("EMP-002", "Rachid Benali",     "Maçon"),
+    ("EMP-003", "Hassan Toumi",      "Coffreur"),
+    ("EMP-004", "Karim Idrissi",     "Ferrailleur"),
+    ("EMP-005", "Said Ouazzani",     "Manœuvre"),
+    ("EMP-006", "Mohamed Fassi",     "Électricien"),
+    ("EMP-007", "Abdellah Naciri",   "Plombier"),
+    ("EMP-008", "Omar Sabri",        "Grutier"),
+    ("EMP-009", "Brahim Alaoui",     "Peintre"),
+    ("EMP-010", "Nabil Chraibi",     "Manœuvre"),
 ]
 
-PRESENCE_MAX = 106      # last row of the presence table (rows 7..106)
-EMP_MAX = 103           # last row of the employee table (rows 4..103)
-IMPR_MAX = 45           # last data row of the printable list (rows 6..45)
-HIST_MAX = 1003         # last pre-formatted history row (rows 4..1003)
+# ---- grid layout ---------------------------------------------------------- #
+M_WEEKDAY = 4        # weekday-initial row
+M_HEADER = 5         # day-number row (and left column headers)
+M_DATA = 6           # first worker row
+M_MAX = 85           # last worker row (80 workers)
+M_NUM, M_ID, M_NOM, M_POSTE, M_TOTAL = 2, 3, 4, 5, 6   # B, C, D, E, F
+M_DAY1 = 7           # G  = day 1
+NDAYS = 31
+M_DAYN = M_DAY1 + NDAYS - 1                              # AK = day 31
+M_TOTALROW = M_MAX + 1
+
+# ---- print layout --------------------------------------------------------- #
+J_HEADER = 5
+J_DATA = 6
+J_NUM, J_ID, J_NOM, J_POSTE, J_SIGN = 2, 3, 4, 5, 6
+
+CHECK = "\u2713"     # ✓  (written by VBA via ChrW(10003))
 
 
 # =========================================================================== #
-#  Style registration
+#  Styles
 # =========================================================================== #
 def register_styles(wb: Workbook) -> dict:
     s = {}
-    s["title"] = wb.style({"font": {"bold": True, "size": 20, "color": WHITE},
+    s["title"] = wb.style({"font": {"bold": True, "size": 18, "color": WHITE},
                            "fill": INK, "align": {"horizontal": "center", "vertical": "center"}})
     s["subtitle"] = wb.style({"font": {"italic": True, "size": 11, "color": SUB_TX},
                               "align": {"horizontal": "left", "vertical": "center"}})
     s["hint"] = wb.style({"font": {"italic": True, "size": 10, "color": SUB_TX},
                           "align": {"horizontal": "left", "vertical": "center"}})
-    s["header"] = wb.style({"font": {"bold": True, "size": 11, "color": WHITE},
-                            "fill": INK_LT, "border": _bd(),
-                            "align": {"horizontal": "center", "vertical": "center", "wrap": True}})
     s["label"] = wb.style({"font": {"bold": True, "size": 11, "color": INK},
                            "align": {"horizontal": "right", "vertical": "center"}})
-    s["date_in"] = wb.style({"font": {"bold": True, "size": 12, "color": INPUT_TX},
-                             "fill": INPUT_BG, "border": _bd(), "numfmt": "dd/mm/yyyy",
-                             "align": {"horizontal": "center", "vertical": "center"},
-                             "locked": False})
+    s["month_in"] = wb.style({"font": {"bold": True, "size": 13, "color": INPUT_TX},
+                              "fill": INPUT_BG, "border": _bd(), "numfmt": "mmmm yyyy",
+                              "align": {"horizontal": "center", "vertical": "center"},
+                              "locked": False})
     s["text_in"] = wb.style({"font": {"bold": True, "size": 12, "color": INPUT_TX},
                              "fill": INPUT_BG, "border": _bd(),
                              "align": {"horizontal": "left", "vertical": "center"},
                              "locked": False})
-    s["kpi_label"] = wb.style({"font": {"bold": True, "size": 11, "color": INK},
-                               "fill": LABEL_BG, "border": _bd(),
-                               "align": {"horizontal": "left", "vertical": "center"}})
-    s["kpi_value"] = wb.style({"font": {"bold": True, "size": 16, "color": INK},
-                               "fill": WHITE, "border": _bd(),
-                               "align": {"horizontal": "center", "vertical": "center"}})
-    # data cells
-    s["check"] = wb.style({"font": {"bold": True, "size": 16, "color": GREEN},
-                           "border": _bd(), "locked": False,
-                           "align": {"horizontal": "center", "vertical": "center"}})
-    s["id"] = wb.style({"font": {"size": 11, "color": INK}, "border": _bd(),
-                        "align": {"horizontal": "center", "vertical": "center"}})
-    s["nom"] = wb.style({"font": {"size": 11, "color": INK}, "border": _bd(),
-                         "align": {"horizontal": "left", "vertical": "center"}})
-    s["poste"] = wb.style({"font": {"size": 11, "color": SUB_TX}, "border": _bd(),
-                           "align": {"horizontal": "left", "vertical": "center"}})
-    s["cell_c"] = wb.style({"font": {"size": 11, "color": INK}, "border": _bd(),
-                            "align": {"horizontal": "center", "vertical": "center"}})
-    s["cell_l"] = wb.style({"font": {"size": 11, "color": INK}, "border": _bd(),
-                            "align": {"horizontal": "left", "vertical": "center"}})
-    s["statut"] = wb.style({"font": {"bold": True, "size": 11, "color": INK}, "border": _bd(),
+    s["day_in"] = wb.style({"font": {"bold": True, "size": 14, "color": INPUT_TX},
+                            "fill": INPUT_BG, "border": _bd(),
                             "align": {"horizontal": "center", "vertical": "center"},
                             "locked": False})
-    s["date_cell"] = wb.style({"font": {"size": 11, "color": INK}, "border": _bd(),
-                               "numfmt": "dd/mm/yyyy",
-                               "align": {"horizontal": "center", "vertical": "center"}})
-    s["sign"] = wb.style({"border": _bd(), "align": {"horizontal": "left", "vertical": "center"}})
-    s["foot_label"] = wb.style({"font": {"bold": True, "size": 11, "color": INK},
-                                "align": {"horizontal": "right", "vertical": "center"}})
-    s["foot_line"] = wb.style({"border": {"bottom": {"style": "medium", "color": INK}}})
-    s["foot_val"] = wb.style({"font": {"bold": True, "size": 12, "color": GREEN_TX},
-                              "align": {"horizontal": "left", "vertical": "center"}})
+    s["date_disp"] = wb.style({"font": {"bold": True, "size": 14, "color": INK},
+                               "align": {"horizontal": "left", "vertical": "center"}})
+    s["chantier_disp"] = wb.style({"font": {"bold": True, "size": 12, "color": INK},
+                                   "align": {"horizontal": "left", "vertical": "center"}})
+    # headers
+    s["header"] = wb.style({"font": {"bold": True, "size": 11, "color": WHITE},
+                            "fill": INK_LT, "border": _bd(),
+                            "align": {"horizontal": "center", "vertical": "center", "wrap": True}})
+    s["day_hdr"] = wb.style({"font": {"bold": True, "size": 10, "color": WHITE},
+                             "fill": INK_LT, "border": _bd(),
+                             "align": {"horizontal": "center", "vertical": "center"}})
+    s["wk_hdr"] = wb.style({"font": {"size": 9, "color": WHITE},
+                            "fill": INK, "border": _bd(),
+                            "align": {"horizontal": "center", "vertical": "center"}})
+    # data
+    s["num"] = wb.style({"font": {"size": 11, "color": SUB_TX}, "border": _bd(),
+                         "align": {"horizontal": "center", "vertical": "center"}})
+    s["id"] = wb.style({"font": {"size": 11, "color": INK}, "border": _bd(),
+                        "align": {"horizontal": "center", "vertical": "center"}, "locked": False})
+    s["nom"] = wb.style({"font": {"size": 11, "color": INK}, "border": _bd(),
+                         "align": {"horizontal": "left", "vertical": "center"}, "locked": False})
+    s["poste"] = wb.style({"font": {"size": 11, "color": SUB_TX}, "border": _bd(),
+                           "align": {"horizontal": "left", "vertical": "center"}, "locked": False})
+    s["total"] = wb.style({"font": {"bold": True, "size": 11, "color": GREEN_TX}, "border": _bd(),
+                           "align": {"horizontal": "center", "vertical": "center"}})
+    s["day"] = wb.style({"font": {"bold": True, "size": 12, "color": GREEN_TX}, "border": _bd(),
+                         "align": {"horizontal": "center", "vertical": "center"}, "locked": False})
+    s["dtot"] = wb.style({"font": {"bold": True, "size": 10, "color": INK}, "border": _bd(),
+                          "fill": LABEL_BG,
+                          "align": {"horizontal": "center", "vertical": "center"}})
+    s["dtot_lbl"] = wb.style({"font": {"bold": True, "size": 10, "color": INK}, "fill": LABEL_BG,
+                              "border": _bd(),
+                              "align": {"horizontal": "right", "vertical": "center"}})
+    # print
+    s["p_header"] = wb.style({"font": {"bold": True, "size": 12, "color": WHITE},
+                              "fill": INK_LT, "border": _bd(),
+                              "align": {"horizontal": "center", "vertical": "center"}})
     return s
 
 
 def register_dxf(wb: Workbook) -> dict:
     d = {}
     d["present"] = wb.dxf({"fill": GREEN_LT, "font": {"bold": True, "color": GREEN_TX}})
-    d["absent"] = wb.dxf({"fill": RED_LT, "font": {"bold": True, "color": RED_TX}})
+    d["weekend"] = wb.dxf({"fill": WEEKEND})
+    d["invalid"] = wb.dxf({"fill": INVALID})
     d["band"] = wb.dxf({"fill": BAND})
-    d["actif"] = wb.dxf({"fill": GREEN_LT, "font": {"bold": True, "color": GREEN_TX}})
-    d["inactif"] = wb.dxf({"fill": RED_LT, "font": {"bold": True, "color": RED_TX}})
-    d["oui"] = wb.dxf({"fill": GREEN_LT, "font": {"color": GREEN_TX}})
-    d["non"] = wb.dxf({"fill": RED_LT, "font": {"color": RED_TX}})
     return d
 
 
 # =========================================================================== #
-#  Sheet builders
+#  Sheet: Présence du Mois  (the monthly grid)
 # =========================================================================== #
-def build_presence(wb, S, D):
-    sh = wb.add_sheet("Présence du Jour")
-    sh.code_name = "wsPresence"
-    sh.show_gridlines = False
-    sh.default_row_height = 19
-    sh.freeze_panes(6, 0)
-
-    sh.set_col(1, 2.5)
-    sh.set_col(2, 12)      # Présent
-    sh.set_col(3, 15)      # ID
-    sh.set_col(4, 34)      # Nom
-    sh.set_col(5, 22)      # Poste
-    sh.set_col(6, 3)
-
-    # title / subtitle / hint
-    sh.merge("B1:E1"); sh.cell("B1", "PRÉSENCE DU JOUR", S["title"]); sh.set_row(1, 34)
-    sh.merge("B2:E2"); sh.cell("B2", "Pointage quotidien du chantier", S["subtitle"]); sh.set_row(2, 18)
-
-    # date + chantier
-    sh.cell("B3", "Date :", S["label"])
-    sh.cell("C3", dt.date.today(), S["date_in"])
-    sh.cell("D3", "Chantier :", S["label"])
-    sh.cell("E3", "", S["text_in"])
-    sh.set_row(3, 24)
-
-    # KPI: présents / absents
-    sh.merge("B4:C4"); sh.cell("B4", "Présents / Absents :", S["kpi_label"]); sh.cell("C4", "", S["kpi_label"])
-    sh.merge("D4:E4")
-    kpi = ('UNICHAR(10003)&" "&COUNTIF(B7:B%d,UNICHAR(10003))&"      "'
-           '&UNICHAR(10007)&" "&COUNTIF(B7:B%d,UNICHAR(10007))&"      /  "'
-           '&COUNTA(C7:C%d)') % (PRESENCE_MAX, PRESENCE_MAX, PRESENCE_MAX)
-    sh.cell("D4", None, S["kpi_value"], formula=kpi)
-    sh.cell("E4", "", S["kpi_value"])
-    sh.set_row(4, 28)
-
-    sh.merge("B5:E5")
-    sh.cell("B5", "Astuce : double-cliquez dans la colonne « Présence » — 1 clic = ✓ présent, "
-                  "2 clics = ✗ absent, 3 clics = effacer.", S["hint"])
-    sh.set_row(5, 18)
-
-    # header row 6
-    sh.cell("B6", "Présence", S["header"])
-    sh.cell("C6", "ID", S["header"])
-    sh.cell("D6", "Nom et Prénom", S["header"])
-    sh.cell("E6", "Poste", S["header"])
-    sh.set_row(6, 22)
-
-    # data rows 7.. : pre-fill active employees
-    actifs = [e for e in EMPLOYES if e[6].lower() == "actif"]
-    row = 7
-    for r in range(7, PRESENCE_MAX + 1):
-        sh.write(r, 2, None, S["check"])
-        if r - 7 < len(actifs):
-            emp = actifs[r - 7]
-            sh.write(r, 3, emp[0], S["id"])
-            sh.write(r, 4, emp[1], S["nom"])
-            sh.write(r, 5, emp[4], S["poste"])
-        else:
-            sh.write(r, 3, None, S["id"])
-            sh.write(r, 4, None, S["nom"])
-            sh.write(r, 5, None, S["poste"])
-
-    rng = f"B7:E{PRESENCE_MAX}"
-    sh.add_cond_expr(rng, "$B7=UNICHAR(10003)", D["present"], priority=1)   # ✓ présent
-    sh.add_cond_expr(rng, "$B7=UNICHAR(10007)", D["absent"], priority=2)    # ✗ absent
-    sh.add_cond_expr(rng, "MOD(ROW(),2)=0", D["band"], priority=3)
-    return sh
-
-
-def build_employes(wb, S, D):
-    sh = wb.add_sheet("Employés")
-    sh.code_name = "wsEmployes"
+def build_mois(wb, S, D):
+    sh = wb.add_sheet("Présence du Mois")
+    sh.code_name = "wsMois"
     sh.show_gridlines = False
     sh.default_row_height = 18
-    sh.freeze_panes(3, 0)
+    sh.freeze_panes(M_HEADER, M_TOTAL)     # freeze rows 1-5 and columns A-F
 
-    widths = {1: 2.5, 2: 14, 3: 30, 4: 14, 5: 16, 6: 20, 7: 14, 8: 12}
-    for c, w in widths.items():
-        sh.set_col(c, w)
+    sh.set_col(1, 2.5)
+    sh.set_col(M_NUM, 5)
+    sh.set_col(M_ID, 13)
+    sh.set_col(M_NOM, 28)
+    sh.set_col(M_POSTE, 16)
+    sh.set_col(M_TOTAL, 7)
+    for c in range(M_DAY1, M_DAYN + 1):
+        sh.set_col(c, 3.6)
 
-    sh.merge("B1:H1"); sh.cell("B1", "EMPLOYÉS", S["title"]); sh.set_row(1, 34)
-    sh.merge("B2:H2"); sh.cell("B2", "Fichier du personnel — informations fixes", S["subtitle"]); sh.set_row(2, 18)
+    dcol = col_letter(M_DAYN)
 
-    headers = ["ID Employé", "Nom et Prénom", "CIN", "CNSS", "Poste", "Équipe", "Statut"]
-    for i, h in enumerate(headers):
-        sh.write(3, 2 + i, h, S["header"])
-    sh.set_row(3, 22)
+    # title + navigation button area (button is drawn by VBA over D1:E2)
+    sh.merge("B1:C1"); sh.cell("B1", "PRÉSENCE DU MOIS", S["title"]); sh.set_row(1, 30)
 
-    styles = [S["id"], S["nom"], S["cell_c"], S["cell_c"], S["cell_l"], S["cell_c"], S["statut"]]
-    for r in range(4, EMP_MAX + 1):
-        idx = r - 4
-        emp = EMPLOYES[idx] if idx < len(EMPLOYES) else None
-        for col in range(7):
-            val = emp[col] if emp else None
-            sh.write(r, 2 + col, val, styles[col])
+    sh.cell("B2", "Mois :", S["label"])
+    first_of_month = dt.date(dt.date.today().year, dt.date.today().month, 1)
+    sh.cell("C2", first_of_month, S["month_in"])
+    sh.set_row(2, 22)
 
-    # data validation for Statut + conditional colours
-    sh.add_list_validation(f"H4:H{EMP_MAX}", "Actif,Inactif")
-    sh.add_cond_cellis(f"H4:H{EMP_MAX}", "equal", '"Actif"', D["actif"], priority=1)
-    sh.add_cond_cellis(f"H4:H{EMP_MAX}", "equal", '"Inactif"', D["inactif"], priority=2)
-    sh.add_cond_expr(f"B4:H{EMP_MAX}", "MOD(ROW(),2)=0", D["band"], priority=3)
+    sh.cell("B3", "Chantier :", S["label"])
+    sh.merge("C3:E3"); sh.cell("C3", "", S["text_in"])
+    sh.set_row(3, 20)
+
+    # hint (left) + weekday initials (day columns) + Total header
+    sh.merge("B4:E4")
+    sh.cell("B4", "Double-cliquez sur une case pour marquer ✓ présent.", S["hint"])
+    sh.merge("F4:F5"); sh.cell("F4", "Total", S["header"]); sh.cell("F5", "", S["header"])
+    sh.set_row(4, 16)
+
+    # left column headers (row 5)
+    sh.cell("B5", "N°", S["header"])
+    sh.cell("C5", "ID", S["header"])
+    sh.cell("D5", "Nom et Prénom", S["header"])
+    sh.cell("E5", "Poste", S["header"])
+    sh.set_row(5, 20)
+
+    # day columns: weekday initial (row 4) + day number (row 5), by formula
+    for k in range(NDAYS):
+        c = M_DAY1 + k
+        L = col_letter(c)
+        sh.write(M_WEEKDAY, c, None, S["wk_hdr"],
+                 formula=f'IF({L}{M_HEADER}="","",LEFT(TEXT(DATE(YEAR($C$2),MONTH($C$2),{L}{M_HEADER}),"ddd"),1))')
+        sh.write(M_HEADER, c, None, S["day_hdr"],
+                 formula=f'IF(COLUMN()-{M_DAY1 - 1}<=DAY(EOMONTH($C$2,0)),COLUMN()-{M_DAY1 - 1},"")')
+
+    # worker rows
+    today = dt.date.today()
+    demo_col = M_DAY1 + today.day - 1
+    for r in range(M_DATA, M_MAX + 1):
+        i = r - M_DATA
+        w = WORKERS[i] if i < len(WORKERS) else None
+        sh.write(r, M_NUM, (i + 1) if w else None, S["num"])
+        sh.write(r, M_ID, w[0] if w else None, S["id"])
+        sh.write(r, M_NOM, w[1] if w else None, S["nom"])
+        sh.write(r, M_POSTE, w[2] if w else None, S["poste"])
+        sh.write(r, M_TOTAL, None, S["total"],
+                 formula=f'IF(C{r}="","",COUNTIF(G{r}:{dcol}{r},UNICHAR(10003)))')
+        for c in range(M_DAY1, M_DAYN + 1):
+            # pre-mark today for the first 6 workers so the demo is not empty
+            mark = CHECK if (w and i < 6 and c == demo_col) else None
+            sh.write(r, c, mark, S["day"])
+
+    # per-day totals row
+    sh.cell(f"E{M_TOTALROW}", "Présents / jour :", S["dtot_lbl"])
+    sh.write(M_TOTALROW, M_TOTAL, None, S["dtot"])
+    for c in range(M_DAY1, M_DAYN + 1):
+        L = col_letter(c)
+        sh.write(M_TOTALROW, c, None, S["dtot"],
+                 formula=f'COUNTIF({L}{M_DATA}:{L}{M_MAX},UNICHAR(10003))')
+    sh.set_row(M_TOTALROW, 20)
+
+    # conditional formatting -------------------------------------------------
+    data = f"G{M_DATA}:{dcol}{M_MAX}"
+    sh.add_cond_expr(data, "G6=UNICHAR(10003)", D["present"], priority=1)
+    sh.add_cond_expr(data, 'G$5=""', D["invalid"], priority=2)
+    sh.add_cond_expr(data, 'AND(G$5<>"",WEEKDAY(DATE(YEAR($C$2),MONTH($C$2),G$5),2)>=6)',
+                     D["weekend"], priority=3)
+    hdr = f"G{M_WEEKDAY}:{dcol}{M_HEADER}"
+    sh.add_cond_expr(hdr, 'G$5=""', D["invalid"], priority=4)
+    sh.add_cond_expr(hdr, 'AND(G$5<>"",WEEKDAY(DATE(YEAR($C$2),MONTH($C$2),G$5),2)>=6)',
+                     D["weekend"], priority=5)
+    sh.add_cond_expr(f"B{M_DATA}:F{M_MAX}", "MOD(ROW(),2)=0", D["band"], priority=6)
     return sh
 
 
-def build_impression(wb, S, D):
-    sh = wb.add_sheet("Liste à imprimer")
-    sh.code_name = "wsImpression"
+# =========================================================================== #
+#  Sheet: Feuille du Jour  (auto daily print sheet)
+# =========================================================================== #
+def build_jour(wb, S, D):
+    sh = wb.add_sheet("Feuille du Jour")
+    sh.code_name = "wsJour"
     sh.show_gridlines = False
     sh.setup_page(orientation="portrait", fit_width=1, fit_height=0, paper=9,
                   margins=(0.5, 0.5, 0.6, 0.6, 0.3, 0.3))
 
     sh.set_col(1, 2.5)
-    sh.set_col(2, 6)       # N°
-    sh.set_col(3, 14)      # ID
-    sh.set_col(4, 32)      # Nom
-    sh.set_col(5, 20)      # Poste
-    sh.set_col(6, 24)      # Signature
+    sh.set_col(J_NUM, 6)
+    sh.set_col(J_ID, 14)
+    sh.set_col(J_NOM, 32)
+    sh.set_col(J_POSTE, 20)
+    sh.set_col(J_SIGN, 26)
 
-    sh.merge("B1:F1"); sh.cell("B1", "LISTE DE PRÉSENCE", S["title"]); sh.set_row(1, 34)
-    sh.merge("B2:F2"); sh.cell("B2", "Feuille de présence quotidienne du chantier", S["subtitle"]); sh.set_row(2, 18)
+    sh.merge("B1:F1"); sh.cell("B1", "LISTE DE PRÉSENCE DU JOUR", S["title"]); sh.set_row(1, 30)
+    sh.merge("B2:F2"); sh.cell("B2", "Générée automatiquement depuis la feuille « Présence du Mois »", S["subtitle"])
+    sh.set_row(2, 18)
 
-    sh.cell("B3", "Date :", S["label"])
-    sh.cell("C3", None, S["date_cell"])
-    sh.cell("D3", "Chantier :", S["label"])
-    sh.merge("E3:F3"); sh.cell("E3", "", S["cell_l"]); sh.cell("F3", "", S["cell_l"])
-    sh.set_row(3, 22)
+    sh.cell("B3", "Jour :", S["label"])
+    sh.cell("C3", dt.date.today().day, S["day_in"])
+    sh.cell("D3", "Date :", S["label"])
+    sh.merge("E3:F3")
+    sh.write(3, 5, None, S["date_disp"],
+             formula='IF($C$3="","",TEXT(DATE(YEAR(\'Présence du Mois\'!$C$2),'
+                     'MONTH(\'Présence du Mois\'!$C$2),$C$3),"dddd d mmmm yyyy"))')
+    sh.set_row(3, 24)
 
-    headers = ["N°", "ID", "Nom et Prénom", "Poste", "Signature"]
-    for i, h in enumerate(headers):
-        sh.write(5, 2 + i, h, S["header"])
-    sh.set_row(5, 22)
+    sh.cell("B4", "Chantier :", S["label"])
+    sh.merge("C4:F4")
+    sh.write(4, 3, None, S["chantier_disp"], formula="'Présence du Mois'!$C$3")
+    sh.set_row(4, 20)
 
-    st = [S["cell_c"], S["id"], S["nom"], S["poste"], S["sign"]]
-    for r in range(6, IMPR_MAX + 1):
-        for col in range(5):
-            sh.write(r, 2 + col, None, st[col])
-        sh.set_row(r, 24)
+    for i, h in enumerate(["N°", "ID", "Nom et Prénom", "Poste", "Signature"]):
+        sh.write(J_HEADER, J_NUM + i, h, S["p_header"])
+    sh.set_row(J_HEADER, 22)
 
-    # footer: total + signature line
-    sh.cell(f"C{IMPR_MAX + 2}", "Nombre de présents :", S["foot_label"])
-    sh.merge(f"C{IMPR_MAX + 2}:D{IMPR_MAX + 2}")
-    sh.cell(f"E{IMPR_MAX + 2}", None, S["foot_val"], formula=f"COUNT(B6:B{IMPR_MAX})")
-    sh.cell(f"C{IMPR_MAX + 4}", "Signature du responsable :", S["foot_label"])
-    sh.merge(f"C{IMPR_MAX + 4}:D{IMPR_MAX + 4}")
-    sh.cell(f"E{IMPR_MAX + 4}", "", S["foot_line"])
-    sh.merge(f"E{IMPR_MAX + 4}:F{IMPR_MAX + 4}"); sh.cell(f"F{IMPR_MAX + 4}", "", S["foot_line"])
-
-    sh.set_print_area(f"B1:F{IMPR_MAX + 5}")
-    return sh
-
-
-def build_historique(wb, S, D):
-    sh = wb.add_sheet("Historique")
-    sh.code_name = "wsHistorique"
-    sh.show_gridlines = False
-    sh.default_row_height = 18
-    sh.freeze_panes(3, 0)
-
-    sh.set_col(1, 2.5)
-    sh.set_col(2, 14)      # Date
-    sh.set_col(3, 14)      # ID
-    sh.set_col(4, 32)      # Nom
-    sh.set_col(5, 12)      # Présent
-
-    sh.merge("B1:E1"); sh.cell("B1", "HISTORIQUE DES PRÉSENCES", S["title"]); sh.set_row(1, 34)
-    sh.merge("B2:E2"); sh.cell("B2", "Journées enregistrées — archivage automatique", S["subtitle"]); sh.set_row(2, 18)
-
-    for i, h in enumerate(["Date", "ID", "Nom et Prénom", "Présent"]):
-        sh.write(3, 2 + i, h, S["header"])
-    sh.set_row(3, 22)
-
-    for r in range(4, HIST_MAX + 1):
-        sh.write(r, 2, None, S["date_cell"])
-        sh.write(r, 3, None, S["id"])
-        sh.write(r, 4, None, S["nom"])
-        sh.write(r, 5, None, S["cell_c"])
-
-    sh.add_cond_cellis(f"E4:E{HIST_MAX}", "equal", '"Présent"', D["oui"], priority=1)
-    sh.add_cond_cellis(f"E4:E{HIST_MAX}", "equal", '"Absent"', D["non"], priority=2)
-    sh.add_cond_expr(f"B4:E{HIST_MAX}", "MOD(ROW(),2)=0", D["band"], priority=3)
+    # the day list + footer are filled/formatted by VBA (ConstruireJour)
+    sh.add_number_validation(f"C3", "between", "1", "31")
     return sh
 
 
@@ -350,305 +323,255 @@ WB_ATTR = (
     'Attribute VB_Customizable = True\n'
 )
 
+THISWORKBOOK_CODE = 'Attribute VB_Name = "ThisWorkbook"\n' + WB_ATTR + '''Private Sub Workbook_Open()
+    modPresence.InitialiserOutil
+End Sub
+'''
 
-def _ws_header(code_name: str) -> str:
+WSMOIS_CODE = 'Attribute VB_Name = "wsMois"\n' + WS_ATTR + '''Private Sub Worksheet_Activate()
+    On Error Resume Next
+    modPresence.CreerBoutons
+End Sub
+
+Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+    modPresence.BasculerJour Target, Cancel
+End Sub
+'''
+
+WSJOUR_CODE = 'Attribute VB_Name = "wsJour"\n' + WS_ATTR + '''Private Sub Worksheet_Activate()
+    On Error Resume Next
+    modPresence.CreerBoutons
+    If Not IsNumeric(Me.Range("C3").Value) Then Me.Range("C3").Value = Day(Date)
+    modPresence.ConstruireJour
+End Sub
+
+Private Sub Worksheet_Change(ByVal Target As Range)
+    If Intersect(Target, Me.Range("C3")) Is Nothing Then Exit Sub
+    Application.EnableEvents = False
+    modPresence.ConstruireJour
+    Application.EnableEvents = True
+End Sub
+'''
+
+MODPRESENCE_CODE = '''Attribute VB_Name = "modPresence"
+Option Explicit
+
+' ===== Feuilles =====
+Public Const NOM_MOIS As String = "Présence du Mois"
+Public Const NOM_JOUR As String = "Feuille du Jour"
+
+' ===== Grille mensuelle =====
+Public Const M_HEADER As Long = 5
+Public Const M_DATA As Long = 6
+Public Const M_MAX As Long = 85
+Public Const M_ID As Long = 3
+Public Const M_NOM As Long = 4
+Public Const M_POSTE As Long = 5
+Public Const M_DAY1 As Long = 7
+Public Const M_DAYN As Long = 37
+Public Const CELL_MOIS As String = "C2"
+Public Const CELL_CHANTIER As String = "C3"
+
+' ===== Feuille du jour =====
+Public Const J_DATA As Long = 6
+Public Const J_NUM As Long = 2
+Public Const J_ID As Long = 3
+Public Const J_NOM As Long = 4
+Public Const J_POSTE As Long = 5
+Public Const J_SIGN As Long = 6
+Public Const CELL_JOUR As String = "C3"
+
+Public Function Coche() As String
+    Coche = ChrW(10003)
+End Function
+
+' Lancé à l'ouverture du classeur.
+Public Sub InitialiserOutil()
+    On Error Resume Next
+    CreerBoutons
+    On Error GoTo 0
+    Dim wsM As Worksheet, wsJ As Worksheet
+    Set wsM = ThisWorkbook.Worksheets(NOM_MOIS)
+    Set wsJ = ThisWorkbook.Worksheets(NOM_JOUR)
+    If Not IsDate(wsM.Range(CELL_MOIS).Value) Then
+        wsM.Range(CELL_MOIS).Value = DateSerial(Year(Date), Month(Date), 1)
+    End If
+    If Not IsNumeric(wsJ.Range(CELL_JOUR).Value) Then wsJ.Range(CELL_JOUR).Value = Day(Date)
+    ConstruireJour
+    wsM.Activate
+End Sub
+
+' Double-clic dans la grille : marque / enlève la présence du jour.
+Public Sub BasculerJour(ByVal Target As Range, ByRef Cancel As Boolean)
+    Dim wsM As Worksheet
+    Set wsM = ThisWorkbook.Worksheets(NOM_MOIS)
+    If Target.Count <> 1 Then Exit Sub
+    If Target.Column < M_DAY1 Or Target.Column > M_DAYN Then Exit Sub
+    If Target.Row < M_DATA Or Target.Row > M_MAX Then Exit Sub
+    If Trim$(CStr(wsM.Cells(Target.Row, M_ID).Value)) = "" Then Exit Sub
+    If Trim$(CStr(wsM.Cells(M_HEADER, Target.Column).Value)) = "" Then Exit Sub
+    Cancel = True
+    If Trim$(CStr(Target.Value)) = Coche() Then
+        Target.ClearContents
+    Else
+        Target.Value = Coche()
+    End If
+End Sub
+
+' Construit la liste imprimable des présents pour le jour choisi.
+Public Sub ConstruireJour()
+    Dim wsM As Worksheet, wsJ As Worksheet
+    Set wsM = ThisWorkbook.Worksheets(NOM_MOIS)
+    Set wsJ = ThisWorkbook.Worksheets(NOM_JOUR)
+    Application.ScreenUpdating = False
+    wsJ.Range(wsJ.Cells(J_DATA, J_NUM), wsJ.Cells(500, J_SIGN)).Clear
+    Dim vJ As Variant
+    vJ = wsJ.Range(CELL_JOUR).Value
+    Dim n As Long
+    n = 0
+    If IsNumeric(vJ) Then
+        Dim jour As Long
+        jour = CLng(vJ)
+        If jour >= 1 And jour <= 31 Then
+            Dim col As Long
+            col = M_DAY1 + jour - 1
+            Dim lastM As Long, r As Long, dst As Long
+            lastM = wsM.Cells(wsM.Rows.Count, M_ID).End(xlUp).Row
+            dst = J_DATA
+            For r = M_DATA To lastM
+                If Trim$(CStr(wsM.Cells(r, M_ID).Value)) <> "" Then
+                    If Trim$(CStr(wsM.Cells(r, col).Value)) = Coche() Then
+                        n = n + 1
+                        wsJ.Cells(dst, J_NUM).Value = n
+                        wsJ.Cells(dst, J_ID).Value = wsM.Cells(r, M_ID).Value
+                        wsJ.Cells(dst, J_NOM).Value = wsM.Cells(r, M_NOM).Value
+                        wsJ.Cells(dst, J_POSTE).Value = wsM.Cells(r, M_POSTE).Value
+                        dst = dst + 1
+                    End If
+                End If
+            Next r
+        End If
+    End If
+    FormaterJour n
+    Application.ScreenUpdating = True
+End Sub
+
+Private Sub FormaterJour(ByVal n As Long)
+    Dim wsJ As Worksheet
+    Set wsJ = ThisWorkbook.Worksheets(NOM_JOUR)
+    Dim lastRow As Long
+    If n > 0 Then
+        Dim rng As Range
+        Set rng = wsJ.Range(wsJ.Cells(J_DATA, J_NUM), wsJ.Cells(J_DATA + n - 1, J_SIGN))
+        With rng.Borders
+            .LineStyle = xlContinuous
+            .Weight = xlThin
+            .Color = RGB(189, 195, 199)
+        End With
+        rng.Font.Name = "Calibri"
+        rng.Font.Size = 11
+        rng.RowHeight = 22
+        wsJ.Range(wsJ.Cells(J_DATA, J_NUM), wsJ.Cells(J_DATA + n - 1, J_NUM)).HorizontalAlignment = xlCenter
+        wsJ.Range(wsJ.Cells(J_DATA, J_ID), wsJ.Cells(J_DATA + n - 1, J_ID)).HorizontalAlignment = xlCenter
+        lastRow = J_DATA + n - 1
+    Else
+        wsJ.Cells(J_DATA, J_NOM).Value = "Aucun employé présent ce jour."
+        wsJ.Cells(J_DATA, J_NOM).Font.Italic = True
+        lastRow = J_DATA
+    End If
+    Dim fr As Long
+    fr = lastRow + 2
+    wsJ.Cells(fr, J_ID).Value = "Total présents :"
+    wsJ.Cells(fr, J_ID).Font.Bold = True
+    wsJ.Cells(fr, J_ID).HorizontalAlignment = xlRight
+    wsJ.Cells(fr, J_NOM).Value = n
+    wsJ.Cells(fr, J_NOM).Font.Bold = True
+    Dim sr As Long
+    sr = fr + 2
+    wsJ.Cells(sr, J_ID).Value = "Signature du responsable :"
+    wsJ.Cells(sr, J_ID).Font.Bold = True
+    wsJ.Cells(sr, J_ID).HorizontalAlignment = xlRight
+    With wsJ.Range(wsJ.Cells(sr, J_POSTE), wsJ.Cells(sr, J_SIGN)).Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .Weight = xlMedium
+        .Color = RGB(44, 62, 80)
+    End With
+    wsJ.PageSetup.PrintArea = "$B$1:$F$" & (sr + 1)
+End Sub
+
+' Bouton (grille) : ouvre la feuille du jour pour aujourd'hui.
+Public Sub OuvrirJour()
+    Dim wsJ As Worksheet
+    Set wsJ = ThisWorkbook.Worksheets(NOM_JOUR)
+    wsJ.Range(CELL_JOUR).Value = Day(Date)
+    wsJ.Activate
+    ConstruireJour
+End Sub
+
+' Bouton (feuille du jour) : revenir à aujourd'hui.
+Public Sub AujourdHui()
+    ThisWorkbook.Worksheets(NOM_JOUR).Range(CELL_JOUR).Value = Day(Date)
+    ConstruireJour
+End Sub
+
+' Bouton (feuille du jour) : aperçu avant impression.
+Public Sub ImprimerJour()
+    ConstruireJour
+    ThisWorkbook.Worksheets(NOM_JOUR).Activate
+    ThisWorkbook.Worksheets(NOM_JOUR).PrintPreview
+End Sub
+
+Public Sub CreerBoutons()
+    Dim wsM As Worksheet, wsJ As Worksheet
+    Set wsM = ThisWorkbook.Worksheets(NOM_MOIS)
+    Set wsJ = ThisWorkbook.Worksheets(NOM_JOUR)
+    SupprimerBoutons wsM
+    SupprimerBoutons wsJ
+    AjouterBouton wsM, "btn_jour", "Feuille du jour", "OuvrirJour", _
+        wsM.Range("D1").Left, wsM.Range("D1").Top + 2, 175, 38, RGB(41, 128, 185)
+    AjouterBouton wsJ, "btn_auj", "Aujourd'hui", "AujourdHui", _
+        wsJ.Range("H3").Left, wsJ.Range("H3").Top, 150, 34, RGB(41, 128, 185)
+    AjouterBouton wsJ, "btn_imp", "Imprimer", "ImprimerJour", _
+        wsJ.Range("H3").Left, wsJ.Range("H3").Top + 42, 150, 34, RGB(39, 174, 96)
+End Sub
+
+Private Sub SupprimerBoutons(ws As Worksheet)
+    Dim shp As Shape
+    For Each shp In ws.Shapes
+        If Left$(shp.Name, 4) = "btn_" Then shp.Delete
+    Next shp
+End Sub
+
+Private Sub AjouterBouton(ws As Worksheet, nom As String, texte As String, macro As String, _
+        g As Double, t As Double, w As Double, h As Double, couleur As Long)
+    Dim b As Shape
+    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, g, t, w, h)
+    b.Name = nom
+    b.OnAction = "'" & ThisWorkbook.Name & "'!" & macro
+    b.Fill.ForeColor.RGB = couleur
+    b.Line.Visible = msoFalse
+    With b.TextFrame
+        .Characters.Text = texte
+        .Characters.Font.Size = 12
+        .Characters.Font.Bold = True
+        .Characters.Font.Name = "Calibri"
+        .Characters.Font.Color = RGB(255, 255, 255)
+        .HorizontalAlignment = xlHAlignCenter
+        .VerticalAlignment = xlVAlignCenter
+    End With
+End Sub
+'''
+
+
+def _ws_doc(code_name: str) -> str:
     return 'Attribute VB_Name = "%s"\n' % code_name + WS_ATTR
-
-
-THISWORKBOOK_CODE = (
-    'Attribute VB_Name = "ThisWorkbook"\n' + WB_ATTR +
-    "Private Sub Workbook_Open()\n"
-    "    modPresence.InitialiserOutil\n"
-    "End Sub\n"
-)
-
-WSPRESENCE_CODE = _ws_header("wsPresence") + (
-    "Private Sub Worksheet_Activate()\n"
-    "    On Error Resume Next\n"
-    "    modPresence.CreerBoutons\n"
-    "End Sub\n"
-    "\n"
-    "Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)\n"
-    "    modPresence.BasculerPresence Target, Cancel\n"
-    "End Sub\n"
-)
-
-MODPRESENCE_CODE = (
-    'Attribute VB_Name = "modPresence"\n'
-    "Option Explicit\n"
-    "\n"
-    "' ===== Noms des feuilles =====\n"
-    'Public Const NOM_PRESENCE As String = "Présence du Jour"\n'
-    'Public Const NOM_EMPLOYES As String = "Employés"\n'
-    'Public Const NOM_IMPRESSION As String = "Liste à imprimer"\n'
-    'Public Const NOM_HISTORIQUE As String = "Historique"\n'
-    "\n"
-    "' ===== Feuille Présence =====\n"
-    "Public Const P_HEADER As Long = 6\n"
-    "Public Const P_DATA As Long = 7\n"
-    "Public Const P_MAX As Long = 106\n"
-    "Public Const P_CHECK As Long = 2\n"
-    "Public Const P_ID As Long = 3\n"
-    "Public Const P_NOM As Long = 4\n"
-    "Public Const P_POSTE As Long = 5\n"
-    'Public Const CELL_DATE As String = "C3"\n'
-    'Public Const CELL_CHANTIER As String = "E3"\n'
-    "\n"
-    "' ===== Feuille Employés =====\n"
-    "Public Const E_DATA As Long = 4\n"
-    "Public Const E_ID As Long = 2\n"
-    "Public Const E_NOM As Long = 3\n"
-    "Public Const E_POSTE As Long = 6\n"
-    "Public Const E_STATUT As Long = 8\n"
-    "\n"
-    "' ===== Feuille Liste à imprimer =====\n"
-    "Public Const L_DATA As Long = 6\n"
-    "Public Const L_NUM As Long = 2\n"
-    "Public Const L_ID As Long = 3\n"
-    "Public Const L_NOM As Long = 4\n"
-    "Public Const L_POSTE As Long = 5\n"
-    'Public Const CELL_L_DATE As String = "C3"\n'
-    'Public Const CELL_L_CHANTIER As String = "E3"\n'
-    "\n"
-    "' ===== Feuille Historique =====\n"
-    "Public Const H_DATA As Long = 4\n"
-    "Public Const H_DATE As Long = 2\n"
-    "Public Const H_ID As Long = 3\n"
-    "Public Const H_NOM As Long = 4\n"
-    "Public Const H_PRESENT As Long = 5\n"
-    "\n"
-    "Public Function Coche() As String\n"
-    "    Coche = ChrW(10003)\n"
-    "End Function\n"
-    "\n"
-    "Public Function Croix() As String\n"
-    "    Croix = ChrW(10007)\n"
-    "End Function\n"
-    "\n"
-    "' Lancé à l'ouverture du classeur.\n"
-    "Public Sub InitialiserOutil()\n"
-    "    On Error Resume Next\n"
-    "    CreerBoutons\n"
-    "    On Error GoTo 0\n"
-    "    Dim wsP As Worksheet\n"
-    "    Set wsP = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
-    "    If Not IsDate(wsP.Range(CELL_DATE).Value) Then wsP.Range(CELL_DATE).Value = Date\n"
-    '    If Trim$(CStr(wsP.Cells(P_DATA, P_ID).Value)) = "" Then RemplirPresence\n'
-    "    wsP.Activate\n"
-    "End Sub\n"
-    "\n"
-    "' (Re)crée les trois gros boutons de la feuille Présence.\n"
-    "Public Sub CreerBoutons()\n"
-    "    Dim ws As Worksheet\n"
-    "    Set ws = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
-    "    Dim shp As Shape\n"
-    "    For Each shp In ws.Shapes\n"
-    '        If Left$(shp.Name, 4) = "btn_" Then shp.Delete\n'
-    "    Next shp\n"
-    "    Dim g As Double, t As Double, w As Double, h As Double\n"
-    '    g = ws.Range("G2").Left\n'
-    '    t = ws.Range("G2").Top\n'
-    "    w = 190\n"
-    "    h = 42\n"
-    '    AjouterBouton ws, "btn_nouvelle", "Nouvelle journée", "NouvelleJournee", g, t, w, h, RGB(41, 128, 185)\n'
-    '    AjouterBouton ws, "btn_enregistrer", "Enregistrer la journée", "EnregistrerJournee", g, t + (h + 8), w, h, RGB(39, 174, 96)\n'
-    '    AjouterBouton ws, "btn_imprimer", "Imprimer la liste", "ImprimerListe", g, t + 2 * (h + 8), w, h, RGB(230, 126, 34)\n'
-    "End Sub\n"
-    "\n"
-    "Private Sub AjouterBouton(ws As Worksheet, nom As String, texte As String, macro As String, _\n"
-    "        g As Double, t As Double, w As Double, h As Double, couleur As Long)\n"
-    "    Dim b As Shape\n"
-    "    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, g, t, w, h)\n"
-    "    b.Name = nom\n"
-    '    b.OnAction = "'"'"'" & ThisWorkbook.Name & "'"'"'!" & macro\n'
-    "    b.Fill.ForeColor.RGB = couleur\n"
-    "    b.Line.Visible = msoFalse\n"
-    "    With b.TextFrame\n"
-    "        .Characters.Text = texte\n"
-    "        .Characters.Font.Size = 12\n"
-    "        .Characters.Font.Bold = True\n"
-    '        .Characters.Font.Name = "Calibri"\n'
-    "        .Characters.Font.Color = RGB(255, 255, 255)\n"
-    "        .HorizontalAlignment = xlHAlignCenter\n"
-    "        .VerticalAlignment = xlVAlignCenter\n"
-    "    End With\n"
-    "End Sub\n"
-    "\n"
-    "' Remplit la liste avec les employés actifs (vide les cases cochées).\n"
-    "Public Sub RemplirPresence()\n"
-    "    Dim wsE As Worksheet, wsP As Worksheet\n"
-    "    Set wsE = ThisWorkbook.Worksheets(NOM_EMPLOYES)\n"
-    "    Set wsP = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
-    "    Application.ScreenUpdating = False\n"
-    "    wsP.Range(wsP.Cells(P_DATA, P_CHECK), wsP.Cells(P_MAX, P_POSTE)).ClearContents\n"
-    "    Dim lastE As Long, r As Long, dst As Long\n"
-    "    lastE = wsE.Cells(wsE.Rows.Count, E_ID).End(xlUp).Row\n"
-    "    dst = P_DATA\n"
-    "    For r = E_DATA To lastE\n"
-    '        If Trim$(CStr(wsE.Cells(r, E_ID).Value)) <> "" _\n'
-    '           And LCase$(Trim$(CStr(wsE.Cells(r, E_STATUT).Value))) = "actif" Then\n'
-    "            If dst > P_MAX Then Exit For\n"
-    "            wsP.Cells(dst, P_ID).Value = wsE.Cells(r, E_ID).Value\n"
-    "            wsP.Cells(dst, P_NOM).Value = wsE.Cells(r, E_NOM).Value\n"
-    "            wsP.Cells(dst, P_POSTE).Value = wsE.Cells(r, E_POSTE).Value\n"
-    "            dst = dst + 1\n"
-    "        End If\n"
-    "    Next r\n"
-    "    Application.ScreenUpdating = True\n"
-    "End Sub\n"
-    "\n"
-    "' Bouton : prépare une nouvelle journée.\n"
-    "Public Sub NouvelleJournee()\n"
-    "    Dim wsP As Worksheet\n"
-    "    Set wsP = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
-    "    RemplirPresence\n"
-    "    wsP.Range(CELL_DATE).Value = Date\n"
-    "    wsP.Activate\n"
-    "    Application.Goto wsP.Range(CELL_DATE), False\n"
-    '    MsgBox "Nouvelle journée prête pour le " & Format$(Date, "dd/mm/yyyy") & "." & vbCrLf & vbCrLf & _\n'
-    '        "Double-cliquez dans la colonne « Présence » : 1 clic = présent, 2 clics = absent, 3 clics = effacer.", _\n'
-    '        vbInformation, "Présence du Jour"\n'
-    "End Sub\n"
-    "\n"
-    "' Double-clic dans la colonne Présence : cycle présent / absent / effacer.\n"
-    "Public Sub BasculerPresence(ByVal Target As Range, ByRef Cancel As Boolean)\n"
-    "    Dim wsP As Worksheet\n"
-    "    Set wsP = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
-    "    If Target.Column <> P_CHECK Then Exit Sub\n"
-    "    If Target.Row < P_DATA Or Target.Row > P_MAX Then Exit Sub\n"
-    '    If Trim$(CStr(wsP.Cells(Target.Row, P_ID).Value)) = "" Then Exit Sub\n'
-    "    Cancel = True\n"
-    "    Dim v As String\n"
-    "    v = Trim$(CStr(Target.Value))\n"
-    "    If v = Coche() Then\n"
-    "        Target.Value = Croix()\n"
-    "    ElseIf v = Croix() Then\n"
-    "        Target.ClearContents\n"
-    "    Else\n"
-    "        Target.Value = Coche()\n"
-    "    End If\n"
-    "End Sub\n"
-    "\n"
-    "' Bouton : enregistre la journée dans l'historique + met à jour la liste.\n"
-    "Public Sub EnregistrerJournee()\n"
-    "    Dim wsP As Worksheet, wsH As Worksheet\n"
-    "    Set wsP = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
-    "    Set wsH = ThisWorkbook.Worksheets(NOM_HISTORIQUE)\n"
-    "    Dim vDate As Variant\n"
-    "    vDate = wsP.Range(CELL_DATE).Value\n"
-    "    If Not IsDate(vDate) Then\n"
-    '        MsgBox "Veuillez d\'abord saisir une date valide.", vbExclamation, "Présence du Jour"\n'
-    "        wsP.Activate: wsP.Range(CELL_DATE).Select\n"
-    "        Exit Sub\n"
-    "    End If\n"
-    "    Dim d As Date\n"
-    "    d = CDate(vDate)\n"
-    "    Dim lastP As Long\n"
-    "    lastP = wsP.Cells(wsP.Rows.Count, P_ID).End(xlUp).Row\n"
-    "    If lastP < P_DATA Then\n"
-    '        MsgBox "La liste est vide. Cliquez d\'abord sur « Nouvelle journée ».", vbExclamation, "Présence du Jour"\n'
-    "        Exit Sub\n"
-    "    End If\n"
-    "    Application.ScreenUpdating = False\n"
-    "    SupprimerDateHistorique d\n"
-    "    Dim lastH As Long, dst As Long\n"
-    "    lastH = wsH.Cells(wsH.Rows.Count, H_DATE).End(xlUp).Row\n"
-    "    If lastH < H_DATA Then\n"
-    "        dst = H_DATA\n"
-    "    Else\n"
-    "        dst = lastH + 1\n"
-    "    End If\n"
-    "    Dim r As Long, total As Long, presents As Long, absents As Long\n"
-    "    Dim marque As String, statut As String\n"
-    "    For r = P_DATA To lastP\n"
-    '        If Trim$(CStr(wsP.Cells(r, P_ID).Value)) <> "" Then\n'
-    "            marque = Trim$(CStr(wsP.Cells(r, P_CHECK).Value))\n"
-    "            If marque = Coche() Then\n"
-    '                statut = "Présent": presents = presents + 1\n'
-    "            ElseIf marque = Croix() Then\n"
-    '                statut = "Absent": absents = absents + 1\n'
-    "            Else\n"
-    '                statut = "Non marqué"\n'
-    "            End If\n"
-    "            wsH.Cells(dst, H_DATE).Value = d\n"
-    '            wsH.Cells(dst, H_DATE).NumberFormat = "dd/mm/yyyy"\n'
-    "            wsH.Cells(dst, H_ID).Value = wsP.Cells(r, P_ID).Value\n"
-    "            wsH.Cells(dst, H_NOM).Value = wsP.Cells(r, P_NOM).Value\n"
-    "            wsH.Cells(dst, H_PRESENT).Value = statut\n"
-    "            total = total + 1\n"
-    "            dst = dst + 1\n"
-    "        End If\n"
-    "    Next r\n"
-    "    ConstruireListeImpression\n"
-    "    Application.ScreenUpdating = True\n"
-    '    MsgBox "Journée enregistrée : " & Format$(d, "dd/mm/yyyy") & "." & vbCrLf & vbCrLf & _\n'
-    '        presents & " présent(s), " & absents & " absent(s) sur " & total & " employé(s)." & vbCrLf & _\n'
-    '        "L\'historique et la liste à imprimer ont été mis à jour.", vbInformation, "Présence du Jour"\n'
-    "End Sub\n"
-    "\n"
-    "Private Sub SupprimerDateHistorique(ByVal d As Date)\n"
-    "    Dim wsH As Worksheet\n"
-    "    Set wsH = ThisWorkbook.Worksheets(NOM_HISTORIQUE)\n"
-    "    Dim lastH As Long, r As Long\n"
-    "    lastH = wsH.Cells(wsH.Rows.Count, H_DATE).End(xlUp).Row\n"
-    "    For r = lastH To H_DATA Step -1\n"
-    "        If IsDate(wsH.Cells(r, H_DATE).Value) Then\n"
-    "            If CDate(wsH.Cells(r, H_DATE).Value) = d Then wsH.Rows(r).Delete\n"
-    "        End If\n"
-    "    Next r\n"
-    "End Sub\n"
-    "\n"
-    "' Construit la feuille imprimable avec les seuls employés présents.\n"
-    "Public Sub ConstruireListeImpression()\n"
-    "    Dim wsP As Worksheet, wsL As Worksheet\n"
-    "    Set wsP = ThisWorkbook.Worksheets(NOM_PRESENCE)\n"
-    "    Set wsL = ThisWorkbook.Worksheets(NOM_IMPRESSION)\n"
-    "    Dim lastL As Long\n"
-    "    lastL = wsL.Cells(wsL.Rows.Count, L_ID).End(xlUp).Row\n"
-    "    If lastL < L_DATA Then lastL = L_DATA\n"
-    "    wsL.Range(wsL.Cells(L_DATA, L_NUM), wsL.Cells(lastL + 5, L_POSTE)).ClearContents\n"
-    "    wsL.Range(CELL_L_DATE).Value = wsP.Range(CELL_DATE).Value\n"
-    '    wsL.Range(CELL_L_DATE).NumberFormat = "dd/mm/yyyy"\n'
-    "    wsL.Range(CELL_L_CHANTIER).Value = wsP.Range(CELL_CHANTIER).Value\n"
-    "    Dim lastP As Long, r As Long, dst As Long, n As Long\n"
-    "    lastP = wsP.Cells(wsP.Rows.Count, P_ID).End(xlUp).Row\n"
-    "    dst = L_DATA\n"
-    "    For r = P_DATA To lastP\n"
-    "        If Trim$(CStr(wsP.Cells(r, P_CHECK).Value)) = Coche() Then\n"
-    "            n = n + 1\n"
-    "            wsL.Cells(dst, L_NUM).Value = n\n"
-    "            wsL.Cells(dst, L_ID).Value = wsP.Cells(r, P_ID).Value\n"
-    "            wsL.Cells(dst, L_NOM).Value = wsP.Cells(r, P_NOM).Value\n"
-    "            wsL.Cells(dst, L_POSTE).Value = wsP.Cells(r, P_POSTE).Value\n"
-    "            dst = dst + 1\n"
-    "        End If\n"
-    "    Next r\n"
-    "End Sub\n"
-    "\n"
-    "' Bouton : ouvre l'aperçu avant impression de la liste.\n"
-    "Public Sub ImprimerListe()\n"
-    "    ConstruireListeImpression\n"
-    "    Dim wsL As Worksheet\n"
-    "    Set wsL = ThisWorkbook.Worksheets(NOM_IMPRESSION)\n"
-    '    If Trim$(CStr(wsL.Cells(L_DATA, L_ID).Value)) = "" Then\n'
-    '        MsgBox "Aucun employé n\'est coché comme présent." & vbCrLf & _\n'
-    '            "Cochez au moins un employé avant d\'imprimer.", vbExclamation, "Présence du Jour"\n'
-    "        ThisWorkbook.Worksheets(NOM_PRESENCE).Activate\n"
-    "        Exit Sub\n"
-    "    End If\n"
-    "    wsL.Activate\n"
-    "    wsL.PrintPreview\n"
-    "End Sub\n"
-)
 
 
 def build_vba() -> VbaProject:
     proj = VbaProject("GestionPresences")
     proj.add_document_module("ThisWorkbook", _lf(THISWORKBOOK_CODE))
-    proj.add_document_module("wsPresence", _lf(WSPRESENCE_CODE))
-    proj.add_document_module("wsEmployes", _lf(_ws_header("wsEmployes")))
-    proj.add_document_module("wsImpression", _lf(_ws_header("wsImpression")))
-    proj.add_document_module("wsHistorique", _lf(_ws_header("wsHistorique")))
+    proj.add_document_module("wsMois", _lf(WSMOIS_CODE))
+    proj.add_document_module("wsJour", _lf(WSJOUR_CODE))
     proj.add_procedural_module("modPresence", _lf(MODPRESENCE_CODE))
     return proj
 
@@ -662,10 +585,8 @@ def main(path: str = "Gestion_Presences.xlsm"):
     S = register_styles(wb)
     D = register_dxf(wb)
 
-    build_presence(wb, S, D)
-    build_employes(wb, S, D)
-    build_impression(wb, S, D)
-    build_historique(wb, S, D)
+    build_mois(wb, S, D)
+    build_jour(wb, S, D)
     wb.active_tab = 0
 
     wb.set_vba_project(build_vba().build(), code_name="ThisWorkbook")

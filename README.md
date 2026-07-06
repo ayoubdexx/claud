@@ -47,22 +47,27 @@ python3 build_workbook.py
 - Formulas recalculate automatically on open (`fullCalcOnLoad`).
 
 
+
+
 ---
 
 # Système de Gestion des Présences (Excel + VBA)
 
-Outil Excel **en français** pour gérer les présences quotidiennes sur un
-chantier de construction. Le classeur est **macro-activé** (`.xlsm`) : trois
-gros boutons automatisent tout le travail du matin. Comme le reste du dépôt, il
-est généré en Python **sans aucune dépendance** — y compris le projet VBA, qui
-est écrit octet par octet (compression MS-OVBA + fichier composé OLE2).
+Outil Excel **en français** et **macro-activé** (`.xlsm`) pour pointer les
+présences d'un chantier de construction. Tout est généré en Python **sans aucune
+dépendance** — y compris le projet VBA, écrit octet par octet (compression
+MS-OVBA + fichier composé OLE2).
+
+Le principe : **une seule grille mensuelle** contient tous les ouvriers et tous
+les jours du mois ; on coche les présents d'un double-clic. Une **feuille du
+jour** imprimable donne automatiquement la liste des présents du jour choisi.
 
 ## Fichiers
 
 | Fichier | Rôle |
 |---------|------|
 | `Gestion_Presences.xlsm` | Le classeur fini (ouvrez-le dans Excel). |
-| `build_attendance.py` | Construit les 4 feuilles, les styles, les données d'exemple et le code VBA. |
+| `build_attendance.py` | Construit les 2 feuilles, les styles, les données d'exemple et le code VBA. |
 | `vbagen.py` | Générateur de projet VBA (`vbaProject.bin`) sans dépendance : compression MS-OVBA, chiffrement CMG/DPB/GC, écriture du fichier composé OLE2. |
 | `xlsxgen.py` | Moteur `.xlsx`/`.xlsm` (styles, formules, validations, mises en forme conditionnelles, VBA). |
 
@@ -72,44 +77,47 @@ Régénérer le classeur :
 python3 build_attendance.py
 ```
 
-## Utilisation quotidienne (moins de 2 minutes)
+## Les deux feuilles
 
-1. **Ouvrez** `Gestion_Presences.xlsm` et **activez les macros** (barre jaune
-   « Activer le contenu »).
-2. **Double-cliquez** dans la colonne *Présent* pour cocher (✓) chaque employé
-   présent sur le chantier.
-3. Cliquez sur **Enregistrer la journée**.
-4. Cliquez sur **Imprimer la liste**.
+### 1. Présence du Mois *(feuille principale)*
 
-## Les feuilles
+- En haut : le **Mois** (une date, affichée « juillet 2026 ») et le **Chantier**.
+- Chaque **ligne** = un ouvrier (N°, ID, Nom et Prénom, Poste — saisis une fois).
+- Chaque **colonne** = un jour du mois (1 à 31), avec l'initiale du jour de la
+  semaine. Les **week-ends sont grisés-bleutés** et les jours hors du mois
+  (ex. 31 février) sont **grisés**.
+- **Double-cliquez** sur une case (ouvrier × jour) pour marquer **✓ présent**
+  (la case devient verte) ; double-cliquez à nouveau pour l'enlever.
+- Colonne **Total** : nombre de jours de présence par ouvrier (automatique).
+- Ligne **Présents / jour** : effectif présent chaque jour (automatique).
+- Les noms et la colonne Total restent figés quand on fait défiler les jours.
 
-1. **Présence du Jour** *(feuille principale)* — date, chantier, et la liste des
-   employés actifs remplie automatiquement. On coche uniquement les présents
-   (double-clic). Un compteur affiche « présents / total ».
-2. **Employés** — le fichier du personnel (informations fixes) : ID Employé,
-   Nom et Prénom, CIN, CNSS, Poste, Équipe, Statut (*Actif/Inactif* via liste
-   déroulante). Les IDs sont saisis manuellement.
-3. **Liste à imprimer** — feuille prête à imprimer en **A4** : N°, ID, Nom,
-   Poste, Signature, plus la date, le chantier, le total et la signature du
-   responsable. Elle ne contient que les employés cochés présents.
-4. **Historique** — chaque journée enregistrée est archivée (Date, ID, Nom,
-   Présent) pour consulter n'importe quel jour passé.
+### 2. Feuille du Jour *(impression, synchronisée)*
 
-## Les trois boutons (macros VBA)
+- Choisissez un **Jour** (1 à 31) — par défaut le **jour actuel**.
+- La liste des **présents de ce jour** se construit automatiquement à partir de
+  la grille (N°, ID, Nom, Poste, Signature), avec la **date complète**, le
+  chantier, le **total** et la **signature du responsable**.
+- Bouton **Aujourd'hui** (revenir au jour du jour) et bouton **Imprimer**
+  (aperçu avant impression). Mise en page **A4**.
 
-| Bouton | Action |
-|--------|--------|
-| **Nouvelle journée** | Recharge la liste des employés actifs, décoche tout et met la date du jour. |
-| **Enregistrer la journée** | Copie les présences dans l'*Historique* (ré-enregistrer une même date la met à jour) et régénère la *Liste à imprimer*. |
-| **Imprimer la liste** | Construit la liste des présents et ouvre l'aperçu avant impression. |
+## Utilisation quotidienne
+
+1. Ouvrez le fichier et **activez les macros**.
+2. Sur *Présence du Mois*, **double-cliquez** les cases des ouvriers présents
+   aujourd'hui.
+3. Onglet *Feuille du Jour* (ou bouton **Feuille du jour**) → la liste du jour
+   s'affiche → **Imprimer**.
+
+Pour consulter/imprimer **n'importe quel autre jour**, changez simplement le
+numéro dans la case *Jour* : la liste se met à jour toute seule.
 
 ## Notes de conception
 
-- **Interface sobre et moderne** : police Calibri, en-têtes ardoise, lignes
-  alternées, employés présents surlignés en vert (mise en forme conditionnelle).
-- **Case à cocher = double-clic** dans la colonne *Présent* — aucune saisie,
-  aucun objet fragile ; fonctionne quel que soit le nombre d'employés.
-- Les boutons sont (re)créés automatiquement à l'ouverture par le code VBA.
-- Le classeur est livré avec 10 employés d'exemple (9 actifs) pour être
-  utilisable immédiatement ; remplacez-les par les vôtres dans la feuille
-  *Employés*.
+- **Case à cocher = double-clic** dans la grille (aucun objet fragile, marche
+  quel que soit le nombre d'ouvriers).
+- Les feuilles sont **synchronisées** : la feuille du jour lit toujours la
+  grille du mois.
+- Police Calibri, en-têtes ardoise, présents en vert, week-ends grisés.
+- Livré avec 10 ouvriers d'exemple ; remplacez-les par les vôtres. Capacité :
+  80 ouvriers, 31 jours.
