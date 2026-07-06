@@ -320,6 +320,7 @@ class Sheet:
         self.default_row_height: float | None = None
         self.drawing_rid: str | None = None
         self.tab_color: str | None = None
+        self.code_name: str | None = None   # VBA document-module code name
 
     # -- writing cells ----------------------------------------------------- #
     def write(self, row: int, col: int, value=None, style: int = 0, formula: str | None = None):
@@ -396,10 +397,14 @@ class Sheet:
 
     # -- render ------------------------------------------------------------ #
     def render(self) -> str:
-        # sheetPr (tab colour)
-        sheet_pr = ""
+        # sheetPr (code name for VBA + tab colour); fitToPage injected later
+        pr_attr = f' codeName="{_escattr(self.code_name)}"' if self.code_name else ""
+        pr_children = ""
         if self.tab_color:
-            sheet_pr = f'<sheetPr><tabColor rgb="{self.tab_color}"/></sheetPr>'
+            pr_children += f'<tabColor rgb="{self.tab_color}"/>'
+        sheet_pr = ""
+        if pr_attr or pr_children:
+            sheet_pr = f"<sheetPr{pr_attr}>{pr_children}</sheetPr>"
 
         # dimension
         if self.cells:
@@ -636,6 +641,13 @@ class Workbook:
         self._charts: list[tuple[Sheet, Chart]] = []
         self.title = "Payroll Management System"
         self.active_tab = 0
+        self.vba_project: bytes | None = None   # embedded vbaProject.bin
+        self.code_name: str | None = None       # ThisWorkbook code name
+
+    def set_vba_project(self, data: bytes, code_name: str = "ThisWorkbook"):
+        """Embed a vbaProject.bin so the workbook is saved as a macro-enabled .xlsm."""
+        self.vba_project = data
+        self.code_name = code_name
 
     def add_sheet(self, name: str) -> Sheet:
         s = Sheet(name, self.reg)
@@ -693,6 +705,10 @@ class Workbook:
         parts["xl/workbook.xml"] = self._workbook_xml()
         parts["xl/_rels/workbook.xml.rels"] = self._workbook_rels()
         parts["xl/styles.xml"] = self.reg.render()
+
+        # embedded VBA project (macro-enabled workbook)
+        if self.vba_project is not None:
+            parts["xl/vbaProject.bin"] = self.vba_project
 
         # worksheets
         for i, s in enumerate(self.sheets, start=1):
@@ -760,8 +776,11 @@ class Workbook:
 
     # -- content types ---------------------------------------------------- #
     def _content_types(self, sheet_charts) -> str:
+        wb_type = ("application/vnd.ms-excel.sheet.macroEnabled.main+xml"
+                   if self.vba_project is not None
+                   else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml")
         overrides = [
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+            f'<Override PartName="/xl/workbook.xml" ContentType="{wb_type}"/>',
             '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
             '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>',
             '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>',
@@ -784,6 +803,11 @@ class Workbook:
                     f'<Override PartName="/xl/charts/chart{chart_counter}.xml" '
                     'ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>'
                 )
+        if self.vba_project is not None:
+            overrides.append(
+                '<Override PartName="/xl/vbaProject.bin" '
+                'ContentType="application/vnd.ms-office.vbaProject"/>'
+            )
         return (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
@@ -813,8 +837,10 @@ class Workbook:
             '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
             '<fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="10000"/>'
-            '<workbookPr defaultThemeVersion="166925"/>'
-            f'<bookViews><workbookView activeTab="{self.active_tab}"/></bookViews>'
+            + ('<workbookPr codeName="%s" defaultThemeVersion="166925"/>'
+               % _escattr(self.code_name) if self.code_name
+               else '<workbookPr defaultThemeVersion="166925"/>')
+            + f'<bookViews><workbookView activeTab="{self.active_tab}"/></bookViews>'
             "<sheets>" + sheets_xml + "</sheets>"
             + names_xml
             + '<calcPr calcId="0" fullCalcOnLoad="1"/>'
@@ -831,6 +857,11 @@ class Workbook:
         rels.append(f'<Relationship Id="rId{style_rid}" '
                     'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" '
                     'Target="styles.xml"/>')
+        if self.vba_project is not None:
+            vba_rid = len(self.sheets) + 2
+            rels.append(f'<Relationship Id="rId{vba_rid}" '
+                        'Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" '
+                        'Target="vbaProject.bin"/>')
         return (
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
