@@ -1,804 +1,828 @@
 """
-build_workbook.py
-Generates "Payroll_Management_System.xlsx" - a complete, automated payroll
-workbook for a Moroccan company. Uses the dependency-free xlsxgen engine.
+Génère Payroll_Management_System.xlsx : solution Excel professionnelle de
+pointage, heures supplémentaires et paie pour une entreprise marocaine de BTP.
+Aucune macro/VBA ; le classeur repose sur des formules, tableaux Excel, plages
+nommées, validations, mise en forme conditionnelle et protection de feuilles.
 """
 
 import datetime as dt
-from xlsxgen import Workbook, Chart, col_letter
 
-# --------------------------------------------------------------------------- #
-#  Capacities & layout constants
-# --------------------------------------------------------------------------- #
-LIST_ROWS = 80                     # employees per list
-L_FIRST, L_LAST = 4, 4 + LIST_ROWS - 1          # 4 .. 83
+from xlsxgen import Chart, Workbook, col_letter
 
-ATT_ROWS = 160                     # attendance capacity (workers + laborers)
-A_FIRST, A_LAST = 5, 5 + ATT_ROWS - 1           # 5 .. 164
+# ---------------------------------------------------------------------------
+# Capacités et constantes
+# ---------------------------------------------------------------------------
+EMPLOYEE_CAPACITY = 300
+CATEGORY_CAPACITY = 50
+EMP_HEADER = 5
+EMP_FIRST = EMP_HEADER + 1
+EMP_LAST = EMP_FIRST + EMPLOYEE_CAPACITY - 1
+ATT_HEADER_DATE = 5
+ATT_HEADER_SUB = 6
+ATT_FIRST = 7
+ATT_LAST = ATT_FIRST + EMPLOYEE_CAPACITY - 1
+PAY_HEADER = 6
+PAY_FIRST = 7
+PAY_LAST = PAY_FIRST + EMPLOYEE_CAPACITY - 1
+CAT_HEADER = 13
+CAT_FIRST = 14
+CAT_LAST = CAT_FIRST + CATEGORY_CAPACITY - 1
 
-FD = 4                             # first Day column (D)
-LD = FD + 2 * 31 - 1               # last OT column   (BM = 65)
-FH_LAST = FD + 2 * 15 - 1          # first-half last col (AG = 33)
-SH_FIRST = FH_LAST + 1             # second-half first col (AH = 34)
-T_WORKED = LD + 1                  # BN 66
-T_OT = LD + 2                      # BO 67
-T_REG = LD + 3                     # BP 68
-T_OTSAL = LD + 4                   # BQ 69
-T_TOTAL = LD + 5                   # BR 70
+FIRST_DAY_COL = 4                 # D
+LAST_DAY_COL = FIRST_DAY_COL + 2 * 31 - 1  # BM
+TOTAL_WORKED = LAST_DAY_COL + 1   # BN
+TOTAL_ABSENT = LAST_DAY_COL + 2   # BO
+TOTAL_LEAVE = LAST_DAY_COL + 3    # BP
+TOTAL_SICK = LAST_DAY_COL + 4     # BQ
+TOTAL_OT = LAST_DAY_COL + 5       # BR
+TOTAL_EST = LAST_DAY_COL + 6      # BS
 
 CL = col_letter
 
-# --------------------------------------------------------------------------- #
-#  Colour palette
-# --------------------------------------------------------------------------- #
-NAVY     = "FF1F3864"
-NAVY2    = "FF2E4E7E"
-BLUE     = "FF2E75B6"
-BLUE_LT  = "FFDDEBF7"
-BLUE_XL  = "FFEAF1FA"
-BLUE_MED = "FFBDD7EE"
-GREEN    = "FF548235"
-GREEN_LT = "FFE2EFDA"
-GREEN_HD = "FF70AD47"
-GOLD     = "FFBF9000"
-GOLD_LT  = "FFFFF2CC"
-GRAY_LT  = "FFF2F2F2"
-GRAY_MD  = "FFD9D9D9"
-GRAY_TX  = "FF808080"
-RED      = "FFC00000"
-RED_LT   = "FFF8CBAD"
-WHITE    = "FFFFFFFF"
-TEAL     = "FF2A9D8F"
-GREEN_OK = "FFC6EFCE"
-GREEN_OKT= "FF006100"
-AMBER    = "FFFFEB9C"
-AMBER_TX = "FF9C6500"
+# ---------------------------------------------------------------------------
+# Palette, formats et styles
+# ---------------------------------------------------------------------------
+NAVY = "FF17365D"
+NAVY_2 = "FF244A73"
+BLUE = "FF2F75B5"
+BLUE_2 = "FF5B9BD5"
+BLUE_LT = "FFDDEBF7"
+TEAL = "FF1F8A8A"
+TEAL_LT = "FFDDEFEF"
+GREEN = "FF548235"
+GREEN_2 = "FF70AD47"
+GREEN_LT = "FFE2F0D9"
+GOLD = "FFD6A100"
+GOLD_LT = "FFFFF2CC"
+ORANGE = "FFED7D31"
+RED = "FFC00000"
+RED_LT = "FFFCE4D6"
+PURPLE = "FF7030A0"
+GRAY = "FF7F8C8D"
+GRAY_MD = "FFD9E1E8"
+GRAY_LT = "FFF3F6F8"
+GRAY_XL = "FFF8FAFC"
+WHITE = "FFFFFFFF"
+BLACK = "FF1F2933"
 
-# Number formats
-MAD  = '#,##0.00" MAD"'
-INT  = '#,##0'
-DEC1 = '0.0'
-DATE = 'dd/mm/yyyy'
-TEXT = '@'
+NUM = "#,##0"
+DEC = "0.00"
+MONEY = "#,##0.00"
+DATE = "dd/mm/yyyy"
+DAY_FMT = "ddd dd"
+PCT = "0.0%"
 
 wb = Workbook()
-wb.active_tab = 3          # open on Daily Attendance (index 3)
+wb.title = "Gestion de la paie et du pointage"
+wb.active_tab = 3
 
-# --------------------------------------------------------------------------- #
-#  Style helpers
-# --------------------------------------------------------------------------- #
+
 def border(*sides, style="thin", color=GRAY_MD):
-    return {s: {"style": style, "color": color} for s in sides}
+    return {side: {"style": style, "color": color} for side in sides}
+
 
 ALL = ("left", "right", "top", "bottom")
-
 S = {}
+
+
 def reg(name, spec):
     S[name] = wb.style(spec)
     return S[name]
 
-# Titles / banners
-reg("title",     {"font": {"bold": True, "size": 20, "color": WHITE, "name": "Calibri"},
-                  "fill": NAVY, "align": {"horizontal": "left", "vertical": "center"}})
-reg("title_c",   {"font": {"bold": True, "size": 20, "color": WHITE},
-                  "fill": NAVY, "align": {"horizontal": "center", "vertical": "center"}})
-reg("subtitle",  {"font": {"size": 10, "italic": True, "color": WHITE},
-                  "fill": NAVY2, "align": {"horizontal": "left", "vertical": "center"}})
-reg("banner",    {"font": {"bold": True, "size": 12, "color": WHITE},
-                  "fill": BLUE, "align": {"horizontal": "left", "vertical": "center"}})
 
-# Table headers
-reg("hdr",       {"font": {"bold": True, "size": 11, "color": WHITE}, "fill": NAVY,
-                  "align": {"horizontal": "center", "vertical": "center", "wrap": True},
-                  "border": border(*ALL, color=NAVY)})
-reg("hdr_l",     {"font": {"bold": True, "size": 11, "color": WHITE}, "fill": NAVY,
-                  "align": {"horizontal": "left", "vertical": "center"},
-                  "border": border(*ALL, color=NAVY)})
-reg("hdr_fh",    {"font": {"bold": True, "size": 10, "color": WHITE}, "fill": GREEN_HD,
-                  "align": {"horizontal": "center", "vertical": "center"},
-                  "border": border(*ALL, color=WHITE)})
-reg("hdr_sh",    {"font": {"bold": True, "size": 10, "color": WHITE}, "fill": BLUE,
-                  "align": {"horizontal": "center", "vertical": "center"},
-                  "border": border(*ALL, color=WHITE)})
-reg("hdr_sub",   {"font": {"bold": True, "size": 8, "color": NAVY}, "fill": GRAY_LT,
-                  "align": {"horizontal": "center", "vertical": "center"},
-                  "border": border(*ALL)})
-reg("hdr_sum",   {"font": {"bold": True, "size": 11, "color": WHITE}, "fill": GOLD,
-                  "align": {"horizontal": "center", "vertical": "center", "wrap": True},
-                  "border": border(*ALL, color=WHITE)})
-
-# Data - input (editable)
-reg("inp",       {"fill": GOLD_LT, "locked": False, "border": border(*ALL),
-                  "align": {"vertical": "center"}})
-reg("inp_c",     {"fill": GOLD_LT, "locked": False, "border": border(*ALL),
-                  "align": {"horizontal": "center", "vertical": "center"}})
-reg("inp_date",  {"fill": GOLD_LT, "locked": False, "border": border(*ALL), "numfmt": DATE,
-                  "align": {"horizontal": "center", "vertical": "center"}})
-reg("inp_txt",   {"fill": GOLD_LT, "locked": False, "border": border(*ALL), "numfmt": TEXT,
-                  "align": {"horizontal": "center", "vertical": "center"}})
-
-# Attendance day-entry cells
-reg("day",       {"locked": False, "border": border(*ALL), "font": {"size": 10},
-                  "align": {"horizontal": "center", "vertical": "center"}})
-reg("ot",        {"locked": False, "border": border(*ALL), "numfmt": DEC1, "fill": BLUE_XL,
-                  "font": {"size": 10, "color": GRAY_TX},
-                  "align": {"horizontal": "center", "vertical": "center"}})
-
-# Data - formula (locked)
-reg("f_id",      {"font": {"bold": True, "color": NAVY}, "border": border(*ALL),
-                  "align": {"horizontal": "center", "vertical": "center"}})
-reg("f_txt",     {"border": border(*ALL), "align": {"vertical": "center"}})
-reg("f_ctr",     {"border": border(*ALL), "align": {"horizontal": "center", "vertical": "center"}})
-reg("f_int",     {"border": border(*ALL), "numfmt": INT, "fill": GREEN_LT,
-                  "align": {"horizontal": "center", "vertical": "center"}})
-reg("f_dec",     {"border": border(*ALL), "numfmt": DEC1, "fill": GREEN_LT,
-                  "align": {"horizontal": "center", "vertical": "center"}})
-reg("f_mad",     {"border": border(*ALL), "numfmt": MAD, "fill": GREEN_LT,
-                  "align": {"horizontal": "right", "vertical": "center"}})
-reg("f_mad_b",   {"font": {"bold": True, "color": NAVY}, "border": border(*ALL),
-                  "numfmt": MAD, "fill": BLUE_LT,
-                  "align": {"horizontal": "right", "vertical": "center"}})
-
-# Row banding (applied through conditional formatting instead of per-cell)
-band_dxf = wb.dxf({"fill": BLUE_LT})
-worked_dxf = wb.dxf({"fill": GREEN_OK, "font": {"color": GREEN_OKT, "bold": True}})
-ot_dxf = wb.dxf({"fill": AMBER, "font": {"color": AMBER_TX, "bold": True}})
-active_dxf = wb.dxf({"fill": GREEN_OK, "font": {"color": GREEN_OKT}})
-inactive_dxf = wb.dxf({"fill": RED_LT, "font": {"color": RED}})
-
-# Legend swatches
-reg("lg_inp",  {"fill": GOLD_LT, "border": border(*ALL),
-                "font": {"size": 9}, "align": {"horizontal": "center", "vertical": "center"}})
-reg("lg_frm",  {"fill": GREEN_LT, "border": border(*ALL),
-                "font": {"size": 9}, "align": {"horizontal": "center", "vertical": "center"}})
-reg("lg_sum",  {"fill": BLUE_LT, "border": border(*ALL),
-                "font": {"size": 9}, "align": {"horizontal": "center", "vertical": "center"}})
-reg("lg_lbl",  {"font": {"size": 9, "color": GRAY_TX}, "align": {"vertical": "center"}})
-
-
-# --------------------------------------------------------------------------- #
-#  1. CONFIG (hidden) - rates & company info
-# --------------------------------------------------------------------------- #
-cfg = wb.add_sheet("Config")
-cfg.hidden = True
-cfg.set_col(1, 26); cfg.set_col(2, 26)
-lbl = wb.style({"font": {"bold": True, "color": NAVY}, "align": {"vertical": "center"}})
-val = wb.style({"fill": GOLD_LT, "locked": False, "border": border(*ALL),
-                "align": {"horizontal": "center", "vertical": "center"}})
-val_mad = wb.style({"fill": GOLD_LT, "locked": False, "border": border(*ALL),
-                    "numfmt": MAD, "align": {"horizontal": "center", "vertical": "center"}})
-
-cfg.cell("A1", "CONFIGURATION (rates & company)", S["banner"])
-cfg.merge("A1:B1")
-rows_cfg = [
-    ("Company Name", "Societe Exemple SARL", val, "CompanyName"),
-    ("Payroll Month", "Janvier 2026", val, "PayrollMonth"),
-    ("Worker Daily Wage", 150, val_mad, "Worker_DailyWage"),
-    ("Worker Overtime Rate", 16.66, val_mad, "Worker_OTRate"),
-    ("Laborer Daily Wage", 100, val_mad, "Laborer_DailyWage"),
-    ("Laborer Overtime Rate", 11.11, val_mad, "Laborer_OTRate"),
-]
-r = 3
-for name, default, style, defname in rows_cfg:
-    cfg.cell(f"A{r}", name, lbl)
-    cfg.write(r, 2, default, style)
-    wb.define_name(defname, f"Config!$B${r}")
-    r += 1
-cfg.protect = True
-
-# --------------------------------------------------------------------------- #
-#  Named ranges for the two employee lists
-# --------------------------------------------------------------------------- #
-def col_range(sheet, col, r1, r2):
-    return f"'{sheet}'!${col}${r1}:${col}${r2}"
-
-wb.define_name("Workers_ID",   col_range("Workers List", "A", L_FIRST, L_LAST))
-wb.define_name("Workers_Name", col_range("Workers List", "B", L_FIRST, L_LAST))
-wb.define_name("Workers_Data", f"'Workers List'!$A${L_FIRST}:$H${L_LAST}")
-wb.define_name("Laborers_ID",   col_range("Laborers List", "A", L_FIRST, L_LAST))
-wb.define_name("Laborers_Name", col_range("Laborers List", "B", L_FIRST, L_LAST))
-wb.define_name("Laborers_Data", f"'Laborers List'!$A${L_FIRST}:$H${L_LAST}")
-
-# Attendance-derived named ranges
-wb.define_name("Att_ID",     col_range("Daily Attendance", "A", A_FIRST, A_LAST))
-wb.define_name("Att_Name",   col_range("Daily Attendance", "B", A_FIRST, A_LAST))
-wb.define_name("Att_Type",   col_range("Daily Attendance", "C", A_FIRST, A_LAST))
-wb.define_name("Att_Worked", col_range("Daily Attendance", CL(T_WORKED), A_FIRST, A_LAST))
-wb.define_name("Att_OT",     col_range("Daily Attendance", CL(T_OT), A_FIRST, A_LAST))
-wb.define_name("Att_Reg",    col_range("Daily Attendance", CL(T_REG), A_FIRST, A_LAST))
-wb.define_name("Att_OTSal",  col_range("Daily Attendance", CL(T_OTSAL), A_FIRST, A_LAST))
-wb.define_name("Att_Total",  col_range("Daily Attendance", CL(T_TOTAL), A_FIRST, A_LAST))
-# Payroll half totals
-wb.define_name("Pay_ID",     col_range("Payroll", "A", A_FIRST, A_LAST))
-wb.define_name("Pay_FH",     col_range("Payroll", "H", A_FIRST, A_LAST))
-wb.define_name("Pay_SH",     col_range("Payroll", "M", A_FIRST, A_LAST))
-
-
-# --------------------------------------------------------------------------- #
-#  Helper: build a legend strip
-# --------------------------------------------------------------------------- #
-def legend(sheet, row, start_col=1):
-    c = start_col
-    items = [("Input", "lg_inp"), ("Auto/Formula", "lg_frm"), ("Summary", "lg_sum")]
-    for text, st in items:
-        sheet.write(row, c, "", S[st])
-        sheet.write(row, c + 1, text, S["lg_lbl"])
-        c += 3
-
-
-# --------------------------------------------------------------------------- #
-#  Employee-list sheets (Workers / Laborers)
-# --------------------------------------------------------------------------- #
-LIST_HEADERS = ["Employee ID", "Full Name", "CIN Number", "CNSS Number",
-                "Phone Number", "Position", "Start Date", "Status"]
-LIST_WIDTHS = [16, 26, 15, 16, 16, 22, 14, 12]
-
-def build_list_sheet(title, subtitle, tab_color):
-    sh = wb.add_sheet(title)
-    sh.tab_color = tab_color
-    for i, w in enumerate(LIST_WIDTHS, start=1):
-        sh.set_col(i, w)
-    # Title
-    sh.merge("A1:H1"); sh.cell("A1", "  " + title.upper(), S["title"])
-    sh.set_row(1, 34)
-    sh.merge("A2:H2"); sh.cell("A2", "  " + subtitle, S["subtitle"])
-    sh.set_row(2, 16)
-    # Header row is on row 3 (L_FIRST - 1); data begins on row 4.
-    return sh
-
-# NOTE: list data rows begin at L_FIRST (4); header on row 3.
-def fill_list_sheet(sh):
-    hdr_row = L_FIRST - 1  # 3
-    for i, h in enumerate(LIST_HEADERS, start=1):
-        sh.write(hdr_row, i, h, S["hdr"])
-    sh.set_row(hdr_row, 26)
-    # data input cells
-    for r in range(L_FIRST, L_LAST + 1):
-        sh.write(r, 1, None, S["inp_c"])                 # ID
-        sh.write(r, 2, None, S["inp"])                   # name
-        sh.write(r, 3, None, S["inp_txt"])               # CIN
-        sh.write(r, 4, None, S["inp_txt"])               # CNSS
-        sh.write(r, 5, None, S["inp_txt"])               # phone
-        sh.write(r, 6, None, S["inp"])                   # position
-        sh.write(r, 7, None, S["inp_date"])              # start date
-        sh.write(r, 8, None, S["inp_c"])                 # status
-    # status dropdown
-    sh.add_list_validation(f"H{L_FIRST}:H{L_LAST}", '"Active,Inactive"')
-    # conditional format for status
-    sh.add_cond_expr(f"H{L_FIRST}:H{L_LAST}", f'$H{L_FIRST}="Active"', active_dxf, 1)
-    sh.add_cond_expr(f"H{L_FIRST}:H{L_LAST}", f'$H{L_FIRST}="Inactive"', inactive_dxf, 2)
-    sh.freeze_panes(hdr_row, 0)
-    sh.protect = True
-    sh.setup_page(orientation="landscape")
-    sh.set_print_area(f"$A$1:$H${L_LAST}")
-
-workers = build_list_sheet("Workers List",
-                           "Employees paid 150.00 MAD / day  -  overtime 16.66 MAD / hour   (\u0639\u0645\u0627\u0644)",
-                           BLUE)
-fill_list_sheet(workers)
-laborers = build_list_sheet("Laborers List",
-                            "Employees paid 100.00 MAD / day  -  overtime 11.11 MAD / hour   (\u062e\u062f\u0627\u0645)",
-                            TEAL)
-fill_list_sheet(laborers)
-
-# seed a couple of example rows so the workbook demonstrates itself
-def seed(sh, rows):
-    r = L_FIRST
-    for rec in rows:
-        for i, v in enumerate(rec, start=1):
-            st = [S["inp_c"], S["inp"], S["inp_txt"], S["inp_txt"], S["inp_txt"],
-                  S["inp"], S["inp_date"], S["inp_c"]][i - 1]
-            sh.write(r, i, v, st)
-        r += 1
-
-seed(workers, [
-    ("W-1001", "Youssef El Amrani", "AB12345", "1234567", "0612345678", "Mason",       dt.date(2022, 3, 1),  "Active"),
-    ("W-1002", "Karim Benali",      "AB67890", "2345678", "0623456789", "Carpenter",   dt.date(2021, 7, 15), "Active"),
-    ("W-1003", "Rachid Toumi",      "AC11223", "3456789", "0634567890", "Electrician", dt.date(2023, 1, 10), "Active"),
-])
-seed(laborers, [
-    ("L-2001", "Hassan Cherki",   "BE55667", "4567890", "0645678901", "Helper",  dt.date(2023, 5, 20), "Active"),
-    ("L-2002", "Said Mansouri",       "BE77889", "5678901", "0656789012", "Loader",  dt.date(2022, 11, 3), "Active"),
-])
-
-
-
-# --------------------------------------------------------------------------- #
-#  3. DAILY ATTENDANCE & OVERTIME ENTRY  (main data-entry page)
-# --------------------------------------------------------------------------- #
-att = wb.add_sheet("Daily Attendance")
-att.tab_color = NAVY
-att.show_gridlines = False
-
-worked_cols = [FD + 2 * (d - 1) for d in range(1, 32)]
-ot_cols = [c + 1 for c in worked_cols]
-
-D = CL(FD); BM = CL(LD)
-BNc, BOc, BPc, BQc, BRc = (CL(T_WORKED), CL(T_OT), CL(T_REG), CL(T_OTSAL), CL(T_TOTAL))
-
-# column widths
-att.set_col(1, 15); att.set_col(2, 24); att.set_col(3, 12)
-for c in worked_cols:
-    att.set_col(c, 4.0)
-    att.set_col(c + 1, 4.6)
-for c, w in ((T_WORKED, 9), (T_OT, 9), (T_REG, 14), (T_OTSAL, 14), (T_TOTAL, 15)):
-    att.set_col(c, w)
-
-last_col = CL(T_TOTAL)
-# Title / subtitle
-att.merge(f"A1:{last_col}1")
-att.cell("A1", "  DAILY ATTENDANCE & OVERTIME  \u2014  monthly entry sheet", S["title"])
-att.set_row(1, 34)
-att.merge(f"A2:{last_col}2")
-att.write(2, 1, None, S["subtitle"],
-          formula='"  Month: "&PayrollMonth&"     Enter 1 (present) or 0 (absent) under Wk, and overtime hours under OT.   '
-                  'Green = present, Amber = overtime.  Names and totals fill in automatically."')
-att.set_row(2, 18)
-# put a live month/company banner via formula in A2 is tricky (merged text). Keep static hint above.
-
-# Group header row 3 & sub header row 4
-att.set_row(3, 20); att.set_row(4, 18)
-att.merge("A3:A4"); att.cell("A3", "Employee ID", S["hdr"])
-att.merge("B3:B4"); att.cell("B3", "Employee Name", S["hdr"])
-att.merge("C3:C4"); att.cell("C3", "Type", S["hdr"])
-for d in range(1, 32):
-    wcol = FD + 2 * (d - 1)
-    ocol = wcol + 1
-    att.merge(f"{CL(wcol)}3:{CL(ocol)}3")
-    att.write(3, wcol, d, S["hdr_fh"] if d <= 15 else S["hdr_sh"])
-    att.write(4, wcol, "Wk", S["hdr_sub"])
-    att.write(4, ocol, "OT", S["hdr_sub"])
-# totals group
-att.merge(f"{BNc}3:{BRc}3"); att.write(3, T_WORKED, "MONTHLY SUMMARY", S["hdr_sum"])
-for c, t in ((T_WORKED, "Worked Days"), (T_OT, "OT Hrs"), (T_REG, "Regular Salary"),
-             (T_OTSAL, "Overtime Pay"), (T_TOTAL, "Total Salary")):
-    att.write(4, c, t, S["hdr_sum"])
-
-# Data rows
-K = "(ROW()-4)"
-nW, nL = "COUNTA(Workers_ID)", "COUNTA(Laborers_ID)"
-for r in range(A_FIRST, A_LAST + 1):
-    id_f = (f'IFERROR(IF({K}<={nW},INDEX(Workers_ID,{K}),'
-            f'IF({K}<={nW}+{nL},INDEX(Laborers_ID,{K}-{nW}),"")),"")')
-    att.write(r, 1, None, S["f_id"], formula=id_f)
-    att.write(r, 2, None, S["f_txt"],
-              formula=(f'IF($A{r}="","",IFERROR(VLOOKUP($A{r},Workers_Data,2,FALSE),'
-                       f'IFERROR(VLOOKUP($A{r},Laborers_Data,2,FALSE),"")))'))
-    att.write(r, 3, None, S["f_ctr"],
-              formula=(f'IF($A{r}="","",IF(COUNTIF(Workers_ID,$A{r})>0,"Worker",'
-                       f'IF(COUNTIF(Laborers_ID,$A{r})>0,"Laborer","")))'))
-    # empty day / ot cells
-    for c in worked_cols:
-        att.write(r, c, None, S["day"])
-        att.write(r, c + 1, None, S["ot"])
-    # totals
-    att.write(r, T_WORKED, None, S["f_int"],
-              formula=(f'IF($A{r}="","",SUMPRODUCT((MOD(COLUMN(${D}{r}:${BM}{r})-COLUMN(${D}{r}),2)=0)'
-                       f'*${D}{r}:${BM}{r}))'))
-    att.write(r, T_OT, None, S["f_dec"],
-              formula=(f'IF($A{r}="","",SUMPRODUCT((MOD(COLUMN(${D}{r}:${BM}{r})-COLUMN(${D}{r}),2)=1)'
-                       f'*${D}{r}:${BM}{r}))'))
-    att.write(r, T_REG, None, S["f_mad"],
-              formula=(f'IF($A{r}="","",${BNc}{r}*IF($C{r}="Worker",Worker_DailyWage,'
-                       f'IF($C{r}="Laborer",Laborer_DailyWage,0)))'))
-    att.write(r, T_OTSAL, None, S["f_mad"],
-              formula=(f'IF($A{r}="","",${BOc}{r}*IF($C{r}="Worker",Worker_OTRate,'
-                       f'IF($C{r}="Laborer",Laborer_OTRate,0)))'))
-    att.write(r, T_TOTAL, None, S["f_mad_b"],
-              formula=f'IF($A{r}="","",${BPc}{r}+${BQc}{r})')
-
-# validation & conditional formatting over the day/ot ranges
-worked_sqref = " ".join(f"{CL(c)}{A_FIRST}:{CL(c)}{A_LAST}" for c in worked_cols)
-ot_sqref = " ".join(f"{CL(c)}{A_FIRST}:{CL(c)}{A_LAST}" for c in ot_cols)
-att.add_number_validation(worked_sqref, "between", "0", "1", decimal=False)
-att.add_number_validation(ot_sqref, "greaterThanOrEqual", "0", decimal=True)
-# highlight present / overtime
-att.add_cond_cellis(worked_sqref, "equal", "1", worked_dxf, priority=1)
-att.add_cond_cellis(ot_sqref, "greaterThan", "0", ot_dxf, priority=2)
-# row banding across info + totals
-att.add_cond_expr(f"A{A_FIRST}:C{A_LAST}", "MOD(ROW(),2)=0", band_dxf, priority=6)
-att.add_cond_expr(f"{BNc}{A_FIRST}:{BRc}{A_LAST}", "MOD(ROW(),2)=0", band_dxf, priority=6)
-
-att.freeze_panes(4, 3)
-att.protect = True
-att.setup_page(orientation="landscape", fit_width=1, fit_height=0)
-att.set_print_area(f"$A$1:${last_col}${A_LAST}")
-
-
-
-# --------------------------------------------------------------------------- #
-#  4. PAYROLL  (First half / Second half)
-# --------------------------------------------------------------------------- #
-reg("sub_fh", {"font": {"bold": True, "size": 9, "color": WHITE}, "fill": GREEN_HD,
-               "align": {"horizontal": "center", "vertical": "center", "wrap": True},
-               "border": border(*ALL, color=WHITE)})
-reg("sub_sh", {"font": {"bold": True, "size": 9, "color": WHITE}, "fill": BLUE,
-               "align": {"horizontal": "center", "vertical": "center", "wrap": True},
-               "border": border(*ALL, color=WHITE)})
-
-pay = wb.add_sheet("Payroll")
-pay.tab_color = GOLD
-pay.show_gridlines = False
-ATT = "'Daily Attendance'!"
-AGc = CL(FH_LAST); AHc = CL(SH_FIRST)
-
-widths = [14, 24, 12, 10, 9, 13, 13, 14, 10, 9, 13, 13, 14, 15]
-for i, w in enumerate(widths, start=1):
-    pay.set_col(i, w)
-
-pay.merge("A1:N1"); pay.cell("A1", "  PAYROLL  \u2014  first & second half of the month", S["title"])
-pay.set_row(1, 34)
-pay.merge("A2:N2")
-pay.cell("A2", "  Automatically split from the Daily Attendance sheet. First Half = days 1-15, "
-               "Second Half = days 16-31.", S["subtitle"])
-pay.set_row(2, 16)
-
-pay.set_row(3, 20); pay.set_row(4, 26)
-pay.merge("A3:A4"); pay.cell("A3", "Employee ID", S["hdr"])
-pay.merge("B3:B4"); pay.cell("B3", "Employee Name", S["hdr"])
-pay.merge("C3:C4"); pay.cell("C3", "Type", S["hdr"])
-pay.merge("D3:H3"); pay.cell("D3", "FIRST HALF  (Days 1 - 15)", S["hdr_fh"])
-pay.merge("I3:M3"); pay.cell("I3", "SECOND HALF  (Days 16 - 31)", S["hdr_sh"])
-pay.merge("N3:N4"); pay.cell("N3", "Month Total", S["hdr_sum"])
-subs = ["Worked Days", "OT Hours", "Regular Pay", "Overtime Pay", "Total Due"]
-for i, t in enumerate(subs):
-    pay.write(4, 4 + i, t, S["sub_fh"])
-    pay.write(4, 9 + i, t, S["sub_sh"])
-
-wage = lambda r: f'IF($C{r}="Worker",Worker_DailyWage,IF($C{r}="Laborer",Laborer_DailyWage,0))'
-rate = lambda r: f'IF($C{r}="Worker",Worker_OTRate,IF($C{r}="Laborer",Laborer_OTRate,0))'
-
-for r in range(A_FIRST, A_LAST + 1):
-    pay.write(r, 1, None, S["f_id"], formula=f'IF({ATT}A{r}="","",{ATT}A{r})')
-    pay.write(r, 2, None, S["f_txt"], formula=f'IF($A{r}="","",{ATT}B{r})')
-    pay.write(r, 3, None, S["f_ctr"], formula=f'IF($A{r}="","",{ATT}C{r})')
-    # first half
-    pay.write(r, 4, None, S["f_int"],
-              formula=(f'IF($A{r}="","",SUMPRODUCT((MOD(COLUMN({ATT}$D{r}:${AGc}{r})-COLUMN({ATT}$D{r}),2)=0)'
-                       f'*{ATT}$D{r}:${AGc}{r}))'))
-    pay.write(r, 5, None, S["f_dec"],
-              formula=(f'IF($A{r}="","",SUMPRODUCT((MOD(COLUMN({ATT}$D{r}:${AGc}{r})-COLUMN({ATT}$D{r}),2)=1)'
-                       f'*{ATT}$D{r}:${AGc}{r}))'))
-    pay.write(r, 6, None, S["f_mad"], formula=f'IF($A{r}="","",$D{r}*{wage(r)})')
-    pay.write(r, 7, None, S["f_mad"], formula=f'IF($A{r}="","",$E{r}*{rate(r)})')
-    pay.write(r, 8, None, S["f_mad_b"], formula=f'IF($A{r}="","",$F{r}+$G{r})')
-    # second half
-    pay.write(r, 9, None, S["f_int"],
-              formula=(f'IF($A{r}="","",SUMPRODUCT((MOD(COLUMN({ATT}${AHc}{r}:$BM{r})-COLUMN({ATT}${AHc}{r}),2)=0)'
-                       f'*{ATT}${AHc}{r}:$BM{r}))'))
-    pay.write(r, 10, None, S["f_dec"],
-              formula=(f'IF($A{r}="","",SUMPRODUCT((MOD(COLUMN({ATT}${AHc}{r}:$BM{r})-COLUMN({ATT}${AHc}{r}),2)=1)'
-                       f'*{ATT}${AHc}{r}:$BM{r}))'))
-    pay.write(r, 11, None, S["f_mad"], formula=f'IF($A{r}="","",$I{r}*{wage(r)})')
-    pay.write(r, 12, None, S["f_mad"], formula=f'IF($A{r}="","",$J{r}*{rate(r)})')
-    pay.write(r, 13, None, S["f_mad_b"], formula=f'IF($A{r}="","",$K{r}+$L{r})')
-    pay.write(r, 14, None, S["f_mad_b"], formula=f'IF($A{r}="","",$H{r}+$M{r})')
-
-pay.add_cond_expr(f"A{A_FIRST}:N{A_LAST}", "MOD(ROW(),2)=0", band_dxf, priority=6)
-pay.freeze_panes(4, 3)
-pay.protect = True
-pay.setup_page(orientation="landscape", fit_width=1, fit_height=0)
-pay.set_print_area(f"$A$1:$N${A_LAST}")
-
-
-
-# --------------------------------------------------------------------------- #
-#  5. SEARCH DASHBOARD
-# --------------------------------------------------------------------------- #
-reg("c_hdr",   {"font": {"bold": True, "size": 13, "color": WHITE}, "fill": NAVY,
-                "align": {"horizontal": "center", "vertical": "center"},
-                "border": border(*ALL, color=NAVY)})
-reg("c_sec",   {"font": {"bold": True, "size": 10, "color": WHITE}, "fill": BLUE,
+# Navigation et titres
+reg("nav", {"font": {"bold": True, "size": 9, "color": WHITE}, "fill": NAVY_2,
+            "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+            "border": border(*ALL, color=WHITE)})
+reg("nav_active", {"font": {"bold": True, "size": 9, "color": NAVY}, "fill": GOLD_LT,
+                   "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+                   "border": border(*ALL, color=GOLD)})
+reg("title", {"font": {"bold": True, "size": 20, "color": WHITE}, "fill": NAVY,
+              "align": {"horizontal": "left", "vertical": "center"}})
+reg("title_center", {"font": {"bold": True, "size": 20, "color": WHITE}, "fill": NAVY,
+                     "align": {"horizontal": "center", "vertical": "center"}})
+reg("subtitle", {"font": {"size": 10, "italic": True, "color": WHITE}, "fill": NAVY_2,
+                 "align": {"horizontal": "left", "vertical": "center"}})
+reg("section", {"font": {"bold": True, "size": 11, "color": WHITE}, "fill": BLUE,
                 "align": {"horizontal": "left", "vertical": "center"},
                 "border": border(*ALL, color=WHITE)})
-reg("c_lbl",   {"font": {"bold": True, "size": 10, "color": NAVY}, "fill": GRAY_LT,
-                "align": {"horizontal": "right", "vertical": "center"}, "border": border(*ALL)})
-reg("c_val",   {"font": {"size": 11}, "align": {"horizontal": "left", "vertical": "center"},
-                "border": border(*ALL), "fill": WHITE})
-reg("c_valc",  {"font": {"size": 11, "bold": True, "color": NAVY},
-                "align": {"horizontal": "center", "vertical": "center"},
-                "border": border(*ALL), "fill": WHITE})
-reg("c_mad",   {"font": {"size": 11}, "numfmt": MAD, "fill": GREEN_LT,
-                "align": {"horizontal": "right", "vertical": "center"}, "border": border(*ALL)})
-reg("c_tot_l", {"font": {"bold": True, "size": 13, "color": WHITE}, "fill": GOLD,
-                "align": {"horizontal": "center", "vertical": "center"}, "border": border(*ALL, color=WHITE)})
-reg("c_tot_v", {"font": {"bold": True, "size": 18, "color": NAVY}, "fill": GOLD_LT, "numfmt": MAD,
-                "align": {"horizontal": "center", "vertical": "center"}, "border": border(*ALL, color=GOLD)})
-reg("s_lbl",   {"font": {"bold": True, "size": 11, "color": NAVY},
-                "align": {"horizontal": "right", "vertical": "center"}})
-reg("hlp",     {"font": {"size": 8, "color": WHITE}})
-
-srch = wb.add_sheet("Search")
-srch.tab_color = GREEN
-srch.show_gridlines = False
-for c, w in ((1, 3), (2, 20), (3, 22), (4, 20), (5, 20), (6, 22), (7, 6)):
-    srch.set_col(c, w)
-
-srch.merge("B1:G1"); srch.cell("B1", "  EMPLOYEE SEARCH", S["title"]); srch.set_row(1, 34)
-srch.merge("B2:G2")
-srch.cell("B2", "  Pick an Employee ID or a Name. The card fills instantly. (If both are set, Name wins.)",
-          S["subtitle"]); srch.set_row(2, 16)
-
-srch.cell("B4", "Search by Employee ID:", S["s_lbl"])
-srch.merge("C4:D4"); srch.write(4, 3, None, S["inp_c"])
-srch.cell("B5", "or Search by Name:", S["s_lbl"])
-srch.merge("C5:E5"); srch.write(5, 3, None, S["inp"])
-srch.add_list_validation("C4:D4", "Att_ID")
-srch.add_list_validation("C5:E5", "Att_Name")
-
-# helper cells (out of print area)
-srch.cell("J1", None, S["hlp"],
-          formula='IF($C$5<>"",IFERROR(INDEX(Att_ID,MATCH($C$5,Att_Name,0)),$C$4),$C$4)')
-srch.cell("J2", None, S["hlp"], formula='IFERROR(MATCH(SelID,Att_ID,0),0)')
-wb.define_name("SelID", "Search!$J$1")
-wb.define_name("SelRow", "Search!$J$2")
-
-def sv(rng):     # guarded index into a named range
-    return f'IF(OR(SelID="",SelRow=0),"-",INDEX({rng},SelRow))'
-def slk(col):    # guarded lookup across both lists
-    return (f'IF(SelID="","-",IFERROR(VLOOKUP(SelID,Workers_Data,{col},FALSE),'
-            f'IFERROR(VLOOKUP(SelID,Laborers_Data,{col},FALSE),"-")))')
-
-# Card header
-srch.merge("B7:G7"); srch.cell("B7", "EMPLOYEE SUMMARY", S["c_hdr"]); srch.set_row(7, 26)
-# Info block
-srch.cell("B8", "Employee Name", S["c_lbl"])
-srch.merge("C8:G8"); srch.write(8, 3, None, S["c_valc"], formula=sv("Att_Name"))
-srch.cell("B9", "Employee ID", S["c_lbl"])
-srch.write(9, 3, None, S["c_valc"], formula=sv("Att_ID"))
-srch.cell("D9", "Employee Type", S["c_lbl"])
-srch.merge("E9:G9"); srch.write(9, 5, None, S["c_valc"], formula=sv("Att_Type"))
-srch.cell("B10", "CIN Number", S["c_lbl"])
-srch.write(10, 3, None, S["c_valc"], formula=slk(3))
-srch.cell("D10", "CNSS Number", S["c_lbl"])
-srch.merge("E10:G10"); srch.write(10, 5, None, S["c_valc"], formula=slk(4))
-# Payroll block
-srch.merge("B11:G11"); srch.cell("B11", "  PAYROLL DETAILS", S["c_sec"]); srch.set_row(11, 20)
-srch.cell("B12", "Worked Days", S["c_lbl"])
-srch.write(12, 3, None, S["c_valc"], formula=sv("Att_Worked"))
-srch.cell("D12", "Overtime Hours", S["c_lbl"])
-srch.merge("E12:G12"); srch.write(12, 5, None, S["c_valc"], formula=sv("Att_OT"))
-srch.cell("B13", "First Half Salary", S["c_lbl"])
-srch.write(13, 3, None, S["c_mad"], formula=sv("Pay_FH"))
-srch.cell("D13", "Second Half Salary", S["c_lbl"])
-srch.merge("E13:G13"); srch.write(13, 5, None, S["c_mad"], formula=sv("Pay_SH"))
-srch.cell("B14", "Monthly (Regular) Salary", S["c_lbl"])
-srch.write(14, 3, None, S["c_mad"], formula=sv("Att_Reg"))
-srch.cell("D14", "Overtime Pay", S["c_lbl"])
-srch.merge("E14:G14"); srch.write(14, 5, None, S["c_mad"], formula=sv("Att_OTSal"))
-# Total
-srch.merge("B15:C15"); srch.cell("B15", "TOTAL AMOUNT DUE", S["c_tot_l"])
-srch.merge("D15:G15"); srch.write(15, 4, None, S["c_tot_v"], formula=sv("Att_Total"))
-srch.set_row(15, 34)
-
-srch.protect = True
-srch.setup_page(orientation="portrait")
-srch.set_print_area("$B$1:$G$15")
-
-
-
-# --------------------------------------------------------------------------- #
-#  6. PRINTABLE PAYSLIP (A4)
-# --------------------------------------------------------------------------- #
-reg("p_comp", {"font": {"bold": True, "size": 22, "color": NAVY},
-               "align": {"horizontal": "center", "vertical": "center"}})
-reg("p_sub",  {"font": {"size": 12, "italic": True, "color": GRAY_TX},
-               "align": {"horizontal": "center", "vertical": "center"}})
-reg("p_box",  {"border": border(*ALL, color=NAVY)})
-reg("p_sec",  {"font": {"bold": True, "size": 11, "color": WHITE}, "fill": NAVY,
-               "align": {"horizontal": "left", "vertical": "center"}, "border": border(*ALL, color=NAVY)})
-reg("p_lbl",  {"font": {"bold": True, "size": 10, "color": NAVY}, "fill": GRAY_LT,
-               "align": {"horizontal": "left", "vertical": "center"}, "border": border(*ALL)})
-reg("p_val",  {"font": {"size": 11}, "align": {"horizontal": "left", "vertical": "center"},
-               "border": border(*ALL)})
-reg("p_mad",  {"font": {"size": 11, "bold": True}, "numfmt": MAD, "fill": GREEN_LT,
-               "align": {"horizontal": "right", "vertical": "center"}, "border": border(*ALL)})
-reg("p_tot_l", {"font": {"bold": True, "size": 13, "color": WHITE}, "fill": GOLD,
-                "align": {"horizontal": "center", "vertical": "center"}, "border": border(*ALL, color=WHITE)})
-reg("p_tot_v", {"font": {"bold": True, "size": 18, "color": NAVY}, "fill": GOLD_LT, "numfmt": MAD,
-                "align": {"horizontal": "center", "vertical": "center"}, "border": border(*ALL, color=GOLD)})
-reg("p_sign", {"border": border("top", style="medium", color=NAVY),
-               "align": {"horizontal": "center", "vertical": "top"},
-               "font": {"size": 9, "color": GRAY_TX}})
-reg("p_selbl", {"font": {"bold": True, "size": 11, "color": NAVY},
-                "align": {"horizontal": "right", "vertical": "center"}})
-
-slip = wb.add_sheet("Payslip")
-slip.tab_color = GRAY_TX
-slip.show_gridlines = False
-for c, w in ((1, 3), (2, 20), (3, 20), (4, 18), (5, 20), (6, 18), (7, 3)):
-    slip.set_col(c, w)
-
-slip.merge("B1:F1"); slip.write(1, 2, None, S["p_comp"], formula="CompanyName"); slip.set_row(1, 32)
-slip.merge("B2:F2"); slip.write(2, 2, None, S["p_sub"],
-            formula='"PAYSLIP  /  BULLETIN DE PAIE   -   "&PayrollMonth'); slip.set_row(2, 20)
-
-slip.cell("B4", "Select Employee ID:", S["p_selbl"])
-slip.merge("C4:D4"); slip.write(4, 3, None, S["inp_c"])
-slip.add_list_validation("C4:D4", "Att_ID")
-# helper
-slip.cell("J1", None, S["hlp"], formula="$C$4")
-slip.cell("J2", None, S["hlp"], formula='IFERROR(MATCH(PS_ID,Att_ID,0),0)')
-wb.define_name("PS_ID", "Payslip!$J$1")
-wb.define_name("PS_Row", "Payslip!$J$2")
-
-def pv(rng):
-    return f'IF(OR(PS_ID="",PS_Row=0),"-",INDEX({rng},PS_Row))'
-def plk(col):
-    return (f'IF(PS_ID="","-",IFERROR(VLOOKUP(PS_ID,Workers_Data,{col},FALSE),'
-            f'IFERROR(VLOOKUP(PS_ID,Laborers_Data,{col},FALSE),"-")))')
-
-slip.merge("B6:F6"); slip.cell("B6", "  EMPLOYEE INFORMATION", S["p_sec"]); slip.set_row(6, 20)
-slip.cell("B7", "Employee ID", S["p_lbl"]);   slip.merge("C7:D7"); slip.write(7, 3, None, S["p_val"], formula=pv("Att_ID"))
-slip.cell("E7", "Month", S["p_lbl"]);         slip.write(7, 6, None, S["p_val"], formula="PayrollMonth")
-slip.cell("B8", "Employee Name", S["p_lbl"]); slip.merge("C8:F8"); slip.write(8, 3, None, S["p_val"], formula=pv("Att_Name"))
-slip.cell("B9", "Employee Type", S["p_lbl"]); slip.merge("C9:D9"); slip.write(9, 3, None, S["p_val"], formula=pv("Att_Type"))
-slip.cell("E9", "CIN Number", S["p_lbl"]);    slip.write(9, 6, None, S["p_val"], formula=plk(3))
-slip.cell("B10", "CNSS Number", S["p_lbl"]);  slip.merge("C10:F10"); slip.write(10, 3, None, S["p_val"], formula=plk(4))
-
-slip.merge("B12:F12"); slip.cell("B12", "  EARNINGS", S["p_sec"]); slip.set_row(12, 20)
-slip.cell("B13", "Worked Days", S["p_lbl"]);      slip.merge("C13:D13"); slip.write(13, 3, None, S["p_val"], formula=pv("Att_Worked"))
-slip.cell("E13", "Overtime Hours", S["p_lbl"]);   slip.write(13, 6, None, S["p_val"], formula=pv("Att_OT"))
-slip.cell("B14", "Regular Salary", S["p_lbl"]);   slip.merge("C14:D14"); slip.write(14, 3, None, S["p_mad"], formula=pv("Att_Reg"))
-slip.cell("E14", "Overtime Salary", S["p_lbl"]);  slip.write(14, 6, None, S["p_mad"], formula=pv("Att_OTSal"))
-slip.merge("B16:C16"); slip.cell("B16", "TOTAL SALARY", S["p_tot_l"])
-slip.merge("D16:F16"); slip.write(16, 4, None, S["p_tot_v"], formula=pv("Att_Total")); slip.set_row(16, 34)
-
-# Signatures
-slip.set_row(20, 30)
-slip.write(20, 2, None, S["p_sign"], formula='"Date: "&TEXT(TODAY(),"dd/mm/yyyy")')
-slip.merge("B20:C20")
-slip.merge("B22:C22"); slip.cell("B22", "Employee Signature", S["p_sign"]); slip.set_row(22, 30)
-slip.merge("E22:F22"); slip.cell("E22", "Manager Signature", S["p_sign"])
-
-slip.protect = True
-slip.setup_page(orientation="portrait", fit_width=1, fit_height=1)
-slip.set_print_area("$A$1:$G$24")
-
-
-
-# --------------------------------------------------------------------------- #
-#  7. PAYROLL DASHBOARD  (KPIs + charts)
-# --------------------------------------------------------------------------- #
-def klbl(color):
-    return wb.style({"font": {"bold": True, "size": 10, "color": WHITE}, "fill": color,
-                     "align": {"horizontal": "center", "vertical": "center"},
+reg("section_teal", {"font": {"bold": True, "size": 11, "color": WHITE}, "fill": TEAL,
+                     "align": {"horizontal": "left", "vertical": "center"},
                      "border": border(*ALL, color=WHITE)})
-reg("k_int", {"font": {"bold": True, "size": 20, "color": NAVY}, "fill": GRAY_LT, "numfmt": INT,
-              "align": {"horizontal": "center", "vertical": "center"}, "border": border(*ALL)})
-reg("k_mad", {"font": {"bold": True, "size": 16, "color": NAVY}, "fill": GRAY_LT, "numfmt": MAD,
-              "align": {"horizontal": "center", "vertical": "center"}, "border": border(*ALL)})
-reg("ct_hd", {"font": {"bold": True, "size": 10, "color": NAVY}, "fill": GRAY_LT,
-              "align": {"horizontal": "left", "vertical": "center"}, "border": border(*ALL)})
-reg("ct_v",  {"numfmt": INT, "align": {"horizontal": "right", "vertical": "center"}, "border": border(*ALL)})
-reg("ct_m",  {"numfmt": MAD, "align": {"horizontal": "right", "vertical": "center"}, "border": border(*ALL)})
+reg("logo", {"font": {"bold": True, "size": 13, "color": GRAY}, "fill": GRAY_LT,
+             "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+             "border": border(*ALL, style="medium", color=GRAY_MD), "locked": False})
 
-dash = wb.add_sheet("Dashboard")
-dash.tab_color = NAVY
-dash.show_gridlines = False
-for c in range(2, 10):
-    dash.set_col(c, 14)
-dash.set_col(1, 3)
+# En-têtes et cellules
+reg("hdr", {"font": {"bold": True, "size": 10, "color": WHITE}, "fill": NAVY,
+            "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+            "border": border(*ALL, color=WHITE)})
+reg("hdr_blue", {"font": {"bold": True, "size": 9, "color": WHITE}, "fill": BLUE,
+                 "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+                 "border": border(*ALL, color=WHITE)})
+reg("hdr_green", {"font": {"bold": True, "size": 9, "color": WHITE}, "fill": GREEN_2,
+                  "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+                  "border": border(*ALL, color=WHITE)})
+reg("hdr_gold", {"font": {"bold": True, "size": 9, "color": WHITE}, "fill": GOLD,
+                 "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+                 "border": border(*ALL, color=WHITE)})
+reg("subhdr", {"font": {"bold": True, "size": 8, "color": NAVY}, "fill": GRAY_LT,
+               "align": {"horizontal": "center", "vertical": "center", "wrap": True},
+               "border": border(*ALL)})
+reg("label", {"font": {"bold": True, "size": 10, "color": NAVY}, "fill": GRAY_LT,
+              "align": {"horizontal": "left", "vertical": "center"},
+              "border": border(*ALL)})
+reg("input", {"fill": GOLD_LT, "locked": False, "border": border(*ALL),
+              "align": {"vertical": "center"}})
+reg("input_center", {"fill": GOLD_LT, "locked": False, "border": border(*ALL),
+                     "align": {"horizontal": "center", "vertical": "center"}})
+reg("input_date", {"fill": GOLD_LT, "locked": False, "border": border(*ALL), "numfmt": DATE,
+                   "align": {"horizontal": "center", "vertical": "center"}})
+reg("input_money", {"fill": GOLD_LT, "locked": False, "border": border(*ALL), "numfmt": MONEY,
+                    "align": {"horizontal": "right", "vertical": "center"}})
+reg("formula", {"fill": WHITE, "border": border(*ALL),
+                "align": {"vertical": "center"}})
+reg("formula_center", {"fill": WHITE, "border": border(*ALL),
+                       "align": {"horizontal": "center", "vertical": "center"}})
+reg("formula_date", {"fill": WHITE, "border": border(*ALL), "numfmt": DATE,
+                     "align": {"horizontal": "center", "vertical": "center"}})
+reg("formula_int", {"fill": GREEN_LT, "border": border(*ALL), "numfmt": NUM,
+                    "align": {"horizontal": "center", "vertical": "center"}})
+reg("formula_dec", {"fill": GREEN_LT, "border": border(*ALL), "numfmt": DEC,
+                    "align": {"horizontal": "center", "vertical": "center"}})
+reg("formula_money", {"fill": GREEN_LT, "border": border(*ALL), "numfmt": MONEY,
+                      "align": {"horizontal": "right", "vertical": "center"}})
+reg("formula_total", {"font": {"bold": True, "color": NAVY}, "fill": BLUE_LT,
+                      "border": border(*ALL), "numfmt": MONEY,
+                      "align": {"horizontal": "right", "vertical": "center"}})
+reg("day_status", {"locked": False, "border": border(*ALL),
+                   "align": {"horizontal": "center", "vertical": "center"}})
+reg("day_ot", {"locked": False, "fill": BLUE_LT, "border": border(*ALL), "numfmt": DEC,
+               "align": {"horizontal": "center", "vertical": "center"}})
+reg("date_header", {"font": {"bold": True, "size": 9, "color": WHITE}, "fill": BLUE,
+                    "numfmt": DAY_FMT,
+                    "align": {"horizontal": "center", "vertical": "center"},
+                    "border": border(*ALL, color=WHITE)})
+reg("helper", {"font": {"size": 8, "color": WHITE}, "fill": WHITE})
+reg("note", {"font": {"size": 9, "italic": True, "color": GRAY},
+             "align": {"vertical": "center", "wrap": True}})
 
-dash.merge("B1:I1"); dash.cell("B1", "  PAYROLL DASHBOARD", S["title"]); dash.set_row(1, 34)
-dash.merge("B2:I2"); dash.cell("B2", "  Live statistics \u2014 everything recalculates as attendance is entered.",
-                                S["subtitle"]); dash.set_row(2, 16)
+# Cartes et impression
+reg("card_label", {"font": {"bold": True, "size": 10, "color": WHITE}, "fill": BLUE,
+                   "align": {"horizontal": "center", "vertical": "center"},
+                   "border": border(*ALL, color=WHITE)})
+reg("card_value_int", {"font": {"bold": True, "size": 21, "color": NAVY}, "fill": GRAY_XL,
+                       "numfmt": NUM, "align": {"horizontal": "center", "vertical": "center"},
+                       "border": border(*ALL, color=GRAY_MD)})
+reg("card_value_dec", {"font": {"bold": True, "size": 20, "color": NAVY}, "fill": GRAY_XL,
+                       "numfmt": DEC, "align": {"horizontal": "center", "vertical": "center"},
+                       "border": border(*ALL, color=GRAY_MD)})
+reg("card_value_money", {"font": {"bold": True, "size": 17, "color": NAVY}, "fill": GRAY_XL,
+                         "numfmt": MONEY, "align": {"horizontal": "center", "vertical": "center"},
+                         "border": border(*ALL, color=GRAY_MD)})
+reg("search_value", {"font": {"bold": True, "size": 11, "color": BLACK}, "fill": WHITE,
+                     "border": border(*ALL), "align": {"vertical": "center"}})
+reg("search_money", {"font": {"bold": True, "size": 11, "color": NAVY}, "fill": GREEN_LT,
+                     "border": border(*ALL), "numfmt": MONEY,
+                     "align": {"horizontal": "right", "vertical": "center"}})
+reg("big_total_label", {"font": {"bold": True, "size": 13, "color": WHITE}, "fill": GOLD,
+                        "align": {"horizontal": "center", "vertical": "center"},
+                        "border": border(*ALL, color=WHITE)})
+reg("big_total_value", {"font": {"bold": True, "size": 18, "color": NAVY}, "fill": GOLD_LT,
+                        "numfmt": MONEY, "align": {"horizontal": "center", "vertical": "center"},
+                        "border": border(*ALL, color=GOLD)})
+reg("signature", {"font": {"size": 9, "color": GRAY},
+                  "align": {"horizontal": "center", "vertical": "top"},
+                  "border": border("top", style="medium", color=NAVY)})
 
-# KPI cards
-kpis = [
-    ("Total Workers",       "COUNTA(Workers_ID)",                  "k_int", BLUE),
-    ("Total Laborers",      "COUNTA(Laborers_ID)",                 "k_int", TEAL),
-    ("Total Worked Days",   "SUM(Att_Worked)",                     "k_int", GREEN),
-    ("Total Overtime Cost", "SUM(Att_OTSal)",                      "k_mad", GOLD),
-    ("Total Payroll",       "SUM(Att_Total)",                      "k_mad", NAVY),
-    ("Average Salary",      'IFERROR(AVERAGEIF(Att_Total,">0"),0)',"k_mad", BLUE),
-    ("Highest Salary",      "IFERROR(MAX(Att_Total),0)",           "k_mad", GREEN),
-    ("Lowest Salary",       'IFERROR(MINIFS(Att_Total,Att_Total,">0"),0)', "k_mad", RED),
+# Formats différentiels
+present_dxf = wb.dxf({"fill": "FFC6EFCE", "font": {"color": "FF006100", "bold": True}})
+absent_dxf = wb.dxf({"fill": "FFFFC7CE", "font": {"color": "FF9C0006", "bold": True}})
+leave_dxf = wb.dxf({"fill": "FFDDEBF7", "font": {"color": NAVY, "bold": True}})
+sick_dxf = wb.dxf({"fill": "FFE4DFEC", "font": {"color": PURPLE, "bold": True}})
+ot_dxf = wb.dxf({"fill": "FFFFEB9C", "font": {"color": "FF9C6500", "bold": True}})
+inactive_dxf = wb.dxf({"fill": RED_LT, "font": {"color": RED}})
+active_dxf = wb.dxf({"fill": GREEN_LT, "font": {"color": GREEN}})
+invalid_day_dxf = wb.dxf({"fill": "FFE7E6E6", "font": {"color": GRAY}})
+weekend_dxf = wb.dxf({"fill": "FF9EADBA", "font": {"color": WHITE, "bold": True}})
+negative_dxf = wb.dxf({"fill": "FFFFC7CE", "font": {"color": RED, "bold": True}})
+banding_dxf = wb.dxf({"fill": GRAY_XL})
+
+SHEET_NAMES = ["PARAMÈTRES", "EMPLOYÉS", "POINTAGE", "TABLEAU DE BORD", "RECHERCHE",
+               "PAIE (15 Jours)", "IMPRESSION"]
+NAV_LABELS = ["⚙ PARAMÈTRES", "👥 EMPLOYÉS", "✓ POINTAGE", "▦ TABLEAU DE BORD",
+              "⌕ RECHERCHE", "MAD PAIE", "▤ IMPRESSION"]
+
+
+def navigation(sheet, current):
+    """Barre de navigation interne, utilisable sans VBA."""
+    sheet.set_row(1, 23)
+    for col, (name, label) in enumerate(zip(SHEET_NAMES, NAV_LABELS), start=1):
+        display = label if sheet.col_widths.get(col, 14) >= 9 else label.split(" ", 1)[0]
+        sheet.write(1, col, display, S["nav_active"] if name == current else S["nav"])
+        sheet.add_hyperlink(f"{CL(col)}1", f"'{name}'!A1", display)
+
+
+def title_block(sheet, title, subtitle, last_col):
+    navigation(sheet, sheet.name)
+    sheet.merge(f"A2:{CL(last_col)}2")
+    sheet.cell("A2", "  " + title, S["title"])
+    sheet.set_row(2, 34)
+    sheet.merge(f"A3:{CL(last_col)}3")
+    sheet.cell("A3", "  " + subtitle, S["subtitle"])
+    sheet.set_row(3, 18)
+    sheet.show_gridlines = False
+
+
+def lookup_category(category_ref, result_range, fallback="0"):
+    return f'IFERROR(INDEX({result_range},MATCH({category_ref},ListeCategories,0)),{fallback})'
+
+
+def day_status_col(day):
+    return FIRST_DAY_COL + 2 * (day - 1)
+
+
+def day_ot_col(day):
+    return day_status_col(day) + 1
+
+
+def status_total_formula(row, days, status, sheet_prefix=""):
+    terms = []
+    prefix = sheet_prefix
+    for day in days:
+        c = CL(day_status_col(day))
+        terms.append(f'IF({prefix}${c}${ATT_HEADER_DATE}<>"",--({prefix}{c}{row}="{status}"),0)')
+    return "SUM(" + ",".join(terms) + ")"
+
+
+def ot_total_formula(row, days, sheet_prefix=""):
+    terms = []
+    prefix = sheet_prefix
+    for day in days:
+        sc = CL(day_status_col(day))
+        oc = CL(day_ot_col(day))
+        terms.append(f'IF({prefix}${sc}${ATT_HEADER_DATE}<>"",IF({prefix}{sc}{row}="Présent",{prefix}{oc}{row},0),0)')
+    return "SUM(" + ",".join(terms) + ")"
+
+
+# ---------------------------------------------------------------------------
+# 1. PARAMÈTRES
+# ---------------------------------------------------------------------------
+settings = wb.add_sheet("PARAMÈTRES")
+settings.tab_color = NAVY
+for c, w in enumerate([23, 24, 4, 23, 24, 4, 14, 14, 14, 14], start=1):
+    settings.set_col(c, w)
+title_block(settings, "PARAMÈTRES DE L’ENTREPRISE",
+            "Toutes les données jaunes sont modifiables ; les calculs des autres feuilles s’adaptent automatiquement.", 10)
+
+# Informations entreprise
+settings.merge("A4:F4"); settings.cell("A4", "  IDENTITÉ ET COORDONNÉES", S["section"])
+settings.cell("A5", "Nom de l’entreprise", S["label"]); settings.merge("B5:F5")
+settings.cell("B5", "Société BTP Exemple SARL", S["input"])
+settings.cell("A6", "Adresse", S["label"]); settings.merge("B6:F6")
+settings.cell("B6", "Adresse de l’entreprise, Maroc", S["input"])
+settings.cell("A7", "Téléphone", S["label"]); settings.merge("B7:C7"); settings.cell("B7", "05 00 00 00 00", S["input_center"])
+settings.cell("D7", "E-mail", S["label"]); settings.merge("E7:F7"); settings.cell("E7", "contact@exemple.ma", S["input"])
+settings.merge("H4:J7"); settings.cell("H4", "LOGO\n(à insérer si souhaité)", S["logo"])
+
+# Paramètres de paie
+settings.merge("A9:F9"); settings.cell("A9", "  PÉRIODE ET RÈGLES DE PAIE", S["section_teal"])
+settings.cell("A10", "Année en cours", S["label"]); settings.cell("B10", 2026, S["input_center"])
+settings.cell("D10", "Mois (1 à 12)", S["label"]); settings.cell("E10", 7, S["input_center"])
+settings.cell("A11", "Période de paie (jours)", S["label"]); settings.cell("B11", 15, S["formula_center"])
+settings.cell("D11", "Devise", S["label"]); settings.cell("E11", "MAD", S["input_center"])
+settings.cell("A12", "Heures de travail / jour", S["label"]); settings.cell("B12", 8, S["input_center"])
+settings.cell("D12", "Taux HS par défaut", S["label"]); settings.cell("E12", 18.75, S["input_money"])
+settings.cell("G10", "Budget de paie mensuel", S["label"]); settings.merge("H10:J10"); settings.cell("H10", 100000, S["input_money"])
+settings.cell("G11", "Mois sélectionné", S["label"]); settings.merge("H11:J11")
+settings.write(11, 8, None, S["formula_center"],
+               formula='CHOOSE(MoisCourant,"Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre")&" "&AnneeCourante')
+settings.merge("G12:J12"); settings.cell("G12", "Les taux de catégorie remplacent le taux HS par défaut.", S["note"])
+settings.add_number_validation("B10", "between", "2020", "2100")
+settings.add_list_validation("E10", '"1,2,3,4,5,6,7,8,9,10,11,12"', allow_blank=False)
+settings.add_number_validation("B12", "greaterThan", "0", decimal=True)
+settings.add_number_validation("E12", "greaterThanOrEqual", "0", decimal=True)
+settings.add_number_validation("H10", "greaterThanOrEqual", "0", decimal=True)
+
+# Tableau catégories
+settings.cell(f"A{CAT_HEADER}", "Catégorie", S["hdr"])
+settings.cell(f"B{CAT_HEADER}", "Salaire journalier", S["hdr"])
+settings.cell(f"C{CAT_HEADER}", "Taux horaire HS", S["hdr"])
+settings.merge(f"D{CAT_HEADER}:J{CAT_HEADER}")
+settings.cell(f"D{CAT_HEADER}", "Ajoutez ou modifiez les catégories dans les lignes jaunes ; les listes déroulantes se mettent à jour.", S["note"])
+settings.merge("D14:J16")
+settings.cell("D14", "IMPORTANT — Ce fichier représente un mois de paie. Avant de changer de mois, enregistrez une copie d’archive puis effacez les anciennes saisies de POINTAGE. Sans VBA, Excel ne peut pas effacer automatiquement les données saisies.", S["note"])
+category_seed = [
+    ("Ouvrier", 150.00, 23.44),
+    ("Manœuvre", 120.00, 18.75),
+    ("Chef d'équipe", 220.00, 34.38),
+    ("Conducteur d'engins", 250.00, 39.06),
+    ("Maçon", 180.00, 28.13),
+    ("Coffreur", 185.00, 28.91),
+    ("Ferrailleur", 190.00, 29.69),
+    ("Électricien", 210.00, 32.81),
 ]
-positions = [(2, 3), (4, 5), (6, 7), (8, 9)]
-for i, (label, formula, vstyle, color) in enumerate(kpis):
-    block = i // 4
-    lrow = 4 + block * 3
-    vrow = lrow + 1
-    c1, c2 = positions[i % 4]
-    dash.merge(f"{CL(c1)}{lrow}:{CL(c2)}{lrow}")
-    dash.write(lrow, c1, label, klbl(color)); dash.set_row(lrow, 20)
-    dash.merge(f"{CL(c1)}{vrow}:{CL(c2)}{vrow}")
-    dash.write(vrow, c1, None, S[vstyle], formula=formula); dash.set_row(vrow, 34)
+for r in range(CAT_FIRST, CAT_LAST + 1):
+    settings.write(r, 1, None, S["input"])
+    settings.write(r, 2, None, S["input_money"])
+    settings.write(r, 3, None, S["input_money"])
+for offset, rec in enumerate(category_seed):
+    r = CAT_FIRST + offset
+    settings.write(r, 1, rec[0], S["input"])
+    settings.write(r, 2, rec[1], S["input_money"])
+    settings.write(r, 3, rec[2], S["input_money"])
+settings.add_number_validation(f"B{CAT_FIRST}:C{CAT_LAST}", "greaterThanOrEqual", "0", decimal=True)
+settings.add_table(f"A{CAT_HEADER}:C{CAT_LAST}", "tblCategories",
+                   ["Catégorie", "Salaire journalier", "Taux horaire HS"], "TableStyleMedium2")
+settings.freeze_panes(13, 0)
+settings.protect = True
+settings.setup_page(orientation="portrait", fit_width=1, fit_height=1)
+settings.set_print_area(f"$A$1:$J${CAT_FIRST + len(category_seed) + 2}")
 
-# Chart data tables
-dash.cell("B11", "Workforce", S["ct_hd"]); dash.cell("C11", "Count", S["ct_hd"])
-dash.cell("B12", "Workers", S["ct_hd"]);  dash.write(12, 3, None, S["ct_v"], formula="COUNTA(Workers_ID)")
-dash.cell("B13", "Laborers", S["ct_hd"]); dash.write(13, 3, None, S["ct_v"], formula="COUNTA(Laborers_ID)")
+# Noms globaux de configuration
+wb.define_name("NomSociete", "'PARAMÈTRES'!$B$5")
+wb.define_name("AdresseSociete", "'PARAMÈTRES'!$B$6")
+wb.define_name("TelephoneSociete", "'PARAMÈTRES'!$B$7")
+wb.define_name("EmailSociete", "'PARAMÈTRES'!$E$7")
+wb.define_name("AnneeCourante", "'PARAMÈTRES'!$B$10")
+wb.define_name("MoisCourant", "'PARAMÈTRES'!$E$10")
+wb.define_name("PeriodePaie", "'PARAMÈTRES'!$B$11")
+wb.define_name("Devise", "'PARAMÈTRES'!$E$11")
+wb.define_name("HeuresJour", "'PARAMÈTRES'!$B$12")
+wb.define_name("TauxHSDefaut", "'PARAMÈTRES'!$E$12")
+wb.define_name("BudgetPaie", "'PARAMÈTRES'!$H$10")
+wb.define_name("MoisLibelle", "'PARAMÈTRES'!$H$11")
+wb.define_name("ListeCategories", "tblCategories[Catégorie]")
+wb.define_name("Categories_Salaire", "tblCategories[Salaire journalier]")
+wb.define_name("Categories_TauxHS", "tblCategories[Taux horaire HS]")
 
-dash.cell("E11", "Payroll Split", S["ct_hd"]); dash.cell("F11", "MAD", S["ct_hd"])
-dash.cell("E12", "Regular Pay", S["ct_hd"]);  dash.write(12, 6, None, S["ct_m"], formula="SUM(Att_Reg)")
-dash.cell("E13", "Overtime Pay", S["ct_hd"]); dash.write(13, 6, None, S["ct_m"], formula="SUM(Att_OTSal)")
+# ---------------------------------------------------------------------------
+# 2. EMPLOYÉS
+# ---------------------------------------------------------------------------
+employees = wb.add_sheet("EMPLOYÉS")
+employees.tab_color = BLUE
+for c, w in enumerate([16, 28, 24, 16, 13, 17, 38], start=1):
+    employees.set_col(c, w)
+title_block(employees, "BASE DES EMPLOYÉS",
+            "Saisissez le nom : l’identifiant est créé automatiquement. Une ligne correspond à un matricule ; le tri reste désactivé par protection.", 7)
+headers_emp = ["ID employé", "Nom complet", "Catégorie", "Date d'embauche", "Statut", "Téléphone", "Notes"]
+for c, h in enumerate(headers_emp, start=1):
+    employees.write(EMP_HEADER, c, h, S["hdr"])
+employees.set_row(EMP_HEADER, 28)
+for r in range(EMP_FIRST, EMP_LAST + 1):
+    employees.write(r, 1, None, S["formula_center"], formula=f'IF($B{r}="","","EMP-"&TEXT(ROW()-{EMP_HEADER},"0000"))')
+    employees.write(r, 2, None, S["input"])
+    employees.write(r, 3, None, S["input"])
+    employees.write(r, 4, None, S["input_date"])
+    employees.write(r, 5, None, S["input_center"])
+    employees.write(r, 6, None, S["input_center"])
+    employees.write(r, 7, None, S["input"])
 
-# Charts
-pie = Chart("pie", "Workforce Split",
-            cat_ref="Dashboard!$B$12:$B$13", val_ref="Dashboard!$C$12:$C$13",
-            series_name="Dashboard!$B$11")
-wb.add_chart(dash, pie, anchor=(1, 14, 5, 30))   # 0-based cols/rows
-bar = Chart("bar", "Payroll Composition (MAD)",
-            cat_ref="Dashboard!$E$12:$E$13", val_ref="Dashboard!$F$12:$F$13",
-            series_name="Dashboard!$E$11")
-wb.add_chart(dash, bar, anchor=(5, 14, 9, 30))
+# Exemples génériques clairement identifiés
+employee_seed = [
+    ("Employé Exemple 01", "Ouvrier", dt.date(2025, 1, 15), "Actif", "06 00 00 00 01", "Exemple à remplacer"),
+    ("Employé Exemple 02", "Manœuvre", dt.date(2025, 3, 1), "Actif", "06 00 00 00 02", "Exemple à remplacer"),
+    ("Employé Exemple 03", "Chef d'équipe", dt.date(2024, 9, 10), "Actif", "06 00 00 00 03", "Exemple à remplacer"),
+]
+for offset, rec in enumerate(employee_seed):
+    r = EMP_FIRST + offset
+    for c, value in enumerate(rec, start=2):
+        style = [S["input"], S["input"], S["input_date"], S["input_center"], S["input_center"], S["input"]][c - 2]
+        employees.write(r, c, value, style)
 
-dash.protect = True
-dash.setup_page(orientation="landscape")
-dash.set_print_area("$B$1:$I$30")
+employees.add_list_validation(f"C{EMP_FIRST}:C{EMP_LAST}", "ListeCategories")
+employees.add_list_validation(f"E{EMP_FIRST}:E{EMP_LAST}", '"Actif,Inactif"')
+employees.add_cond_expr(f"E{EMP_FIRST}:E{EMP_LAST}", f'$E{EMP_FIRST}="Actif"', active_dxf, 1)
+employees.add_cond_expr(f"E{EMP_FIRST}:E{EMP_LAST}", f'$E{EMP_FIRST}="Inactif"', inactive_dxf, 2)
+employees.add_table(f"A{EMP_HEADER}:G{EMP_LAST}", "tblEmployes", headers_emp, "TableStyleMedium2")
+employees.freeze_panes(EMP_HEADER, 1)
+employees.protect = True
+employees.setup_page(orientation="landscape", fit_width=1, fit_height=0)
+employees.set_print_area(f"$A$1:$G${EMP_LAST}")
+
+wb.define_name("Employes_ID", f"'EMPLOYÉS'!$A${EMP_FIRST}:$A${EMP_LAST}")
+wb.define_name("Employes_Nom", f"'EMPLOYÉS'!$B${EMP_FIRST}:$B${EMP_LAST}")
+wb.define_name("Employes_Categorie", f"'EMPLOYÉS'!$C${EMP_FIRST}:$C${EMP_LAST}")
+wb.define_name("Employes_Embauche", f"'EMPLOYÉS'!$D${EMP_FIRST}:$D${EMP_LAST}")
+wb.define_name("Employes_Statut", f"'EMPLOYÉS'!$E${EMP_FIRST}:$E${EMP_LAST}")
+wb.define_name("Employes_Telephone", f"'EMPLOYÉS'!$F${EMP_FIRST}:$F${EMP_LAST}")
+wb.define_name("Employes_Notes", f"'EMPLOYÉS'!$G${EMP_FIRST}:$G${EMP_LAST}")
+
+# ---------------------------------------------------------------------------
+# 3. POINTAGE
+# ---------------------------------------------------------------------------
+attendance = wb.add_sheet("POINTAGE")
+attendance.tab_color = TEAL
+attendance.set_col(1, 16); attendance.set_col(2, 27); attendance.set_col(3, 22)
+for day in range(1, 32):
+    attendance.set_col(day_status_col(day), 9.5)
+    attendance.set_col(day_ot_col(day), 6)
+for c, w in [(TOTAL_WORKED, 11), (TOTAL_ABSENT, 10), (TOTAL_LEAVE, 9),
+             (TOTAL_SICK, 9), (TOTAL_OT, 9), (TOTAL_EST, 16)]:
+    attendance.set_col(c, w)
+title_block(attendance, "POINTAGE MENSUEL ET HEURES SUPPLÉMENTAIRES",
+            "Choisissez Présent, Absent, Congé ou Maladie ; saisissez les heures supplémentaires dans la colonne HS.", TOTAL_EST)
+
+attendance.merge(f"A{ATT_HEADER_DATE}:A{ATT_HEADER_SUB}"); attendance.cell(f"A{ATT_HEADER_DATE}", "ID employé", S["hdr"])
+attendance.merge(f"B{ATT_HEADER_DATE}:B{ATT_HEADER_SUB}"); attendance.cell(f"B{ATT_HEADER_DATE}", "Nom complet", S["hdr"])
+attendance.merge(f"C{ATT_HEADER_DATE}:C{ATT_HEADER_SUB}"); attendance.cell(f"C{ATT_HEADER_DATE}", "Catégorie", S["hdr"])
+for day in range(1, 32):
+    sc = day_status_col(day); oc = day_ot_col(day)
+    attendance.merge(f"{CL(sc)}{ATT_HEADER_DATE}:{CL(oc)}{ATT_HEADER_DATE}")
+    attendance.write(ATT_HEADER_DATE, sc, None, S["date_header"],
+                     formula=f'IF({day}<=DAY(EOMONTH(DATE(AnneeCourante,MoisCourant,1),0)),DATE(AnneeCourante,MoisCourant,{day}),"")')
+    attendance.write(ATT_HEADER_SUB, sc, "Statut", S["subhdr"])
+    attendance.write(ATT_HEADER_SUB, oc, "HS", S["subhdr"])
+
+attendance.merge(f"{CL(TOTAL_WORKED)}{ATT_HEADER_DATE}:{CL(TOTAL_EST)}{ATT_HEADER_DATE}")
+attendance.write(ATT_HEADER_DATE, TOTAL_WORKED, "SYNTHÈSE DU MOIS", S["hdr_gold"])
+summary_headers = ["Jours travaillés", "Absences", "Congés", "Maladies", "Heures HS", "Salaire estimé"]
+for c, text in enumerate(summary_headers, start=TOTAL_WORKED):
+    attendance.write(ATT_HEADER_SUB, c, text, S["hdr_gold"])
+attendance.set_row(ATT_HEADER_DATE, 23); attendance.set_row(ATT_HEADER_SUB, 28)
+
+for r in range(ATT_FIRST, ATT_LAST + 1):
+    n = r - ATT_FIRST + 1
+    id_formula = (f'IF(AND(INDEX(Employes_Nom,{n})<>"",INDEX(Employes_Statut,{n})="Actif",'
+                  f'OR(INDEX(Employes_Embauche,{n})="",INDEX(Employes_Embauche,{n})<=EOMONTH(DATE(AnneeCourante,MoisCourant,1),0))),'
+                  f'INDEX(Employes_ID,{n}),"")')
+    attendance.write(r, 1, None, S["formula_center"], formula=id_formula)
+    attendance.write(r, 2, None, S["formula"],
+                     formula=f'IF($A{r}="","",INDEX(Employes_Nom,MATCH($A{r},Employes_ID,0)))')
+    attendance.write(r, 3, None, S["formula_center"],
+                     formula=f'IF($A{r}="","",INDEX(Employes_Categorie,MATCH($A{r},Employes_ID,0)))')
+    for day in range(1, 32):
+        attendance.write(r, day_status_col(day), None, S["day_status"])
+        attendance.write(r, day_ot_col(day), None, S["day_ot"])
+    attendance.write(r, TOTAL_WORKED, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(r, range(1, 32), "Présent")})')
+    attendance.write(r, TOTAL_ABSENT, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(r, range(1, 32), "Absent")})')
+    attendance.write(r, TOTAL_LEAVE, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(r, range(1, 32), "Congé")})')
+    attendance.write(r, TOTAL_SICK, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(r, range(1, 32), "Maladie")})')
+    attendance.write(r, TOTAL_OT, None, S["formula_dec"], formula=f'IF($A{r}="","",{ot_total_formula(r, range(1, 32))})')
+    wage = lookup_category(f"$C{r}", "Categories_Salaire")
+    rate = f'IF({lookup_category(f"$C{r}", "Categories_TauxHS")}>0,{lookup_category(f"$C{r}", "Categories_TauxHS")},TauxHSDefaut)'
+    attendance.write(r, TOTAL_EST, None, S["formula_total"],
+                     formula=f'IF($A{r}="","",${CL(TOTAL_WORKED)}{r}*{wage}+${CL(TOTAL_OT)}{r}*{rate})')
+
+status_sqref = " ".join(f"{CL(day_status_col(d))}{ATT_FIRST}:{CL(day_status_col(d))}{ATT_LAST}" for d in range(1, 32))
+ot_sqref = " ".join(f"{CL(day_ot_col(d))}{ATT_FIRST}:{CL(day_ot_col(d))}{ATT_LAST}" for d in range(1, 32))
+attendance.add_list_validation(status_sqref, '"Présent,Absent,Congé,Maladie"')
+attendance.add_number_validation(ot_sqref, "greaterThanOrEqual", "0", decimal=True)
+attendance.add_cond_cellis(status_sqref, "equal", '"Présent"', present_dxf, 2)
+attendance.add_cond_cellis(status_sqref, "equal", '"Absent"', absent_dxf, 3)
+attendance.add_cond_cellis(status_sqref, "equal", '"Congé"', leave_dxf, 4)
+attendance.add_cond_cellis(status_sqref, "equal", '"Maladie"', sick_dxf, 5)
+attendance.add_cond_cellis(ot_sqref, "greaterThan", "0", ot_dxf, 6)
+for day in range(1, 32):
+    sc = CL(day_status_col(day)); oc = CL(day_ot_col(day))
+    attendance.add_cond_expr(f"{sc}{ATT_FIRST}:{oc}{ATT_LAST}", f'{sc}${ATT_HEADER_DATE}=""', invalid_day_dxf, 1)
+    attendance.add_cond_expr(f"{oc}{ATT_FIRST}:{oc}{ATT_LAST}",
+                             f'AND({oc}{ATT_FIRST}>0,{sc}{ATT_FIRST}<>"Présent")', absent_dxf, 2)
+    attendance.add_cond_expr(f"{sc}{ATT_HEADER_DATE}:{oc}{ATT_HEADER_SUB}",
+                             f'AND({sc}${ATT_HEADER_DATE}<>"",WEEKDAY({sc}${ATT_HEADER_DATE},2)>5)', weekend_dxf, 8)
+attendance.add_cond_expr(f"A{ATT_FIRST}:C{ATT_LAST}", "MOD(ROW(),2)=0", banding_dxf, 10)
+attendance.freeze_panes(ATT_HEADER_SUB, 3)
+attendance.protect = True
+attendance.setup_page(orientation="landscape", fit_width=1, fit_height=0)
+attendance.set_print_area(f"$A$1:${CL(TOTAL_EST)}${ATT_LAST}")
+
+wb.define_name("Pointage_ID", f"'POINTAGE'!$A${ATT_FIRST}:$A${ATT_LAST}")
+wb.define_name("Pointage_Nom", f"'POINTAGE'!$B${ATT_FIRST}:$B${ATT_LAST}")
+wb.define_name("Pointage_Categorie", f"'POINTAGE'!$C${ATT_FIRST}:$C${ATT_LAST}")
+wb.define_name("Pointage_Travailles", f"'POINTAGE'!${CL(TOTAL_WORKED)}${ATT_FIRST}:${CL(TOTAL_WORKED)}${ATT_LAST}")
+wb.define_name("Pointage_Absences", f"'POINTAGE'!${CL(TOTAL_ABSENT)}${ATT_FIRST}:${CL(TOTAL_ABSENT)}${ATT_LAST}")
+wb.define_name("Pointage_Conges", f"'POINTAGE'!${CL(TOTAL_LEAVE)}${ATT_FIRST}:${CL(TOTAL_LEAVE)}${ATT_LAST}")
+wb.define_name("Pointage_Maladies", f"'POINTAGE'!${CL(TOTAL_SICK)}${ATT_FIRST}:${CL(TOTAL_SICK)}${ATT_LAST}")
+wb.define_name("Pointage_HS", f"'POINTAGE'!${CL(TOTAL_OT)}${ATT_FIRST}:${CL(TOTAL_OT)}${ATT_LAST}")
+wb.define_name("Pointage_Estime", f"'POINTAGE'!${CL(TOTAL_EST)}${ATT_FIRST}:${CL(TOTAL_EST)}${ATT_LAST}")
+
+# ---------------------------------------------------------------------------
+# 4. TABLEAU DE BORD
+# ---------------------------------------------------------------------------
+dashboard = wb.add_sheet("TABLEAU DE BORD")
+dashboard.tab_color = NAVY
+for c in range(1, 14):
+    dashboard.set_col(c, 13)
+title_block(dashboard, "TABLEAU DE BORD RH & PAIE",
+            "Indicateurs en temps réel pour la période sélectionnée dans PARAMÈTRES.", 13)
+
+kpis = [
+    ("TOTAL EMPLOYÉS ACTIFS", 'COUNTIF(Employes_Statut,"Actif")', "card_value_int", BLUE),
+    ("PRÉSENTS AUJOURD’HUI", 'IF(AND(AnneeCourante=YEAR(TODAY()),MoisCourant=MONTH(TODAY())),SUMPRODUCT(--(INDEX(\'POINTAGE\'!$D$7:$BM$306,0,2*DAY(TODAY())-1)="Présent")),0)', "card_value_int", GREEN_2),
+    ("ABSENTS AUJOURD’HUI", 'IF(AND(AnneeCourante=YEAR(TODAY()),MoisCourant=MONTH(TODAY())),SUMPRODUCT(--(INDEX(\'POINTAGE\'!$D$7:$BM$306,0,2*DAY(TODAY())-1)="Absent")),0)', "card_value_int", RED),
+    ("TOTAL HEURES HS", "SUM(Pointage_HS)", "card_value_dec", ORANGE),
+    ("PAIE ESTIMÉE", "SUM(Paie_NetMensuel)", "card_value_money", TEAL),
+    ("PAIE RESTANTE", "BudgetPaie-SUM(Paie_NetMensuel)", "card_value_money", GOLD),
+]
+positions = [(2, 4), (5, 7), (8, 10), (2, 4), (5, 7), (8, 10)]
+for i, (label_text, formula, value_style, color) in enumerate(kpis):
+    base_row = 5 if i < 3 else 9
+    c1, c2 = positions[i]
+    label_style = wb.style({"font": {"bold": True, "size": 10, "color": WHITE}, "fill": color,
+                            "align": {"horizontal": "center", "vertical": "center"},
+                            "border": border(*ALL, color=WHITE)})
+    dashboard.merge(f"{CL(c1)}{base_row}:{CL(c2)}{base_row}")
+    dashboard.write(base_row, c1, label_text, label_style); dashboard.set_row(base_row, 21)
+    dashboard.merge(f"{CL(c1)}{base_row + 1}:{CL(c2)}{base_row + 2}")
+    dashboard.write(base_row + 1, c1, None, S[value_style], formula=formula)
+    dashboard.set_row(base_row + 1, 24); dashboard.set_row(base_row + 2, 24)
+dashboard.add_cond_cellis("H10:J11", "lessThan", "0", negative_dxf, 1)
+
+# Tables auxiliaires hors zone d'impression
+helper_hdr = wb.style({"font": {"bold": True, "color": NAVY}, "fill": GRAY_LT,
+                       "border": border(*ALL), "align": {"horizontal": "center"}})
+helper_num = wb.style({"numfmt": NUM, "border": border(*ALL)})
+helper_money = wb.style({"numfmt": MONEY, "border": border(*ALL)})
+
+# Répartition des statuts
+for c, value in [(16, "Statut"), (17, "Nombre")]: dashboard.write(1, c, value, helper_hdr)
+status_helpers = [("Présent", "SUM(Pointage_Travailles)"), ("Absent", "SUM(Pointage_Absences)"),
+                  ("Congé", "SUM(Pointage_Conges)"), ("Maladie", "SUM(Pointage_Maladies)")]
+for i, (label_text, formula) in enumerate(status_helpers, start=2):
+    dashboard.write(i, 16, label_text, S["formula"]); dashboard.write(i, 17, None, helper_num, formula=formula)
+
+# Employés par catégorie
+for c, value in [(19, "Catégorie"), (20, "Employés")]: dashboard.write(1, c, value, helper_hdr)
+for i in range(CATEGORY_CAPACITY):
+    r = 2 + i
+    dashboard.write(r, 19, None, S["formula"], formula=f'IFERROR(INDEX(ListeCategories,{i + 1}),"")')
+    dashboard.write(r, 20, None, helper_num,
+                    formula=f'IF(S{r}="",0,COUNTIFS(Employes_Categorie,S{r},Employes_Statut,"Actif"))')
+
+# HS par catégorie
+for c, value in [(16, "Catégorie"), (17, "Heures HS")]: dashboard.write(9, c, value, helper_hdr)
+for i in range(CATEGORY_CAPACITY):
+    r = 10 + i
+    dashboard.write(r, 16, None, S["formula"], formula=f'IFERROR(INDEX(ListeCategories,{i + 1}),"")')
+    dashboard.write(r, 17, None, helper_num,
+                    formula=f'IF(P{r}="",0,SUMIF(Pointage_Categorie,P{r},Pointage_HS))')
+
+# Évolution cumulative de la paie brute sur le mois (colonnes auxiliaires V:W)
+dashboard.write(1, 22, "Jour", helper_hdr); dashboard.write(1, 23, "Paie brute cumulée", helper_hdr)
+for day in range(1, 32):
+    r = 1 + day
+    dashboard.write(r, 22, day, helper_num)
+    sc = CL(day_status_col(day)); oc = CL(day_ot_col(day))
+    daily = (f'SUMPRODUCT(--(\'POINTAGE\'!${sc}${ATT_FIRST}:${sc}${ATT_LAST}="Présent"),'
+             f'\'PAIE (15 Jours)\'!$D${PAY_FIRST}:$D${PAY_LAST})+'
+             f'SUMPRODUCT(--(\'POINTAGE\'!${sc}${ATT_FIRST}:${sc}${ATT_LAST}="Présent"),'
+             f'\'POINTAGE\'!${oc}${ATT_FIRST}:${oc}${ATT_LAST},'
+             f'\'PAIE (15 Jours)\'!$E${PAY_FIRST}:$E${PAY_LAST})')
+    cumulative = daily if day == 1 else f"W{r - 1}+{daily}"
+    dashboard.write(r, 23, None, helper_money,
+                    formula=f'IF(V{r}>DAY(EOMONTH(DATE(AnneeCourante,MoisCourant,1),0)),"",{cumulative})')
+
+# Graphiques
+wb.add_chart(dashboard, Chart("pie", "Taux de présence", "'TABLEAU DE BORD'!$P$2:$P$5",
+                             "'TABLEAU DE BORD'!$Q$2:$Q$5", "'TABLEAU DE BORD'!$P$1",
+                             colors=[GREEN_2, RED, BLUE_2, PURPLE], n_points=4), (1, 12, 6, 27))
+wb.add_chart(dashboard, Chart("bar", "Employés par catégorie", "'TABLEAU DE BORD'!$S$2:$S$51",
+                             "'TABLEAU DE BORD'!$T$2:$T$51", "'TABLEAU DE BORD'!$T$1",
+                             colors=[BLUE], n_points=CATEGORY_CAPACITY), (6, 12, 12, 27))
+wb.add_chart(dashboard, Chart("bar", "Heures supplémentaires par catégorie", "'TABLEAU DE BORD'!$P$10:$P$59",
+                             "'TABLEAU DE BORD'!$Q$10:$Q$59", "'TABLEAU DE BORD'!$Q$9",
+                             colors=[ORANGE], n_points=CATEGORY_CAPACITY), (1, 28, 6, 43))
+wb.add_chart(dashboard, Chart("line", "Évolution de la paie brute mensuelle", "'TABLEAU DE BORD'!$V$2:$V$32",
+                             "'TABLEAU DE BORD'!$W$2:$W$32", "'TABLEAU DE BORD'!$W$1",
+                             colors=[TEAL], n_points=31), (6, 28, 12, 43))
+dashboard.protect = True
+dashboard.setup_page(orientation="landscape", fit_width=1, fit_height=1)
+dashboard.set_print_area("$A$1:$M$44")
+
+# ---------------------------------------------------------------------------
+# 5. RECHERCHE
+# ---------------------------------------------------------------------------
+search = wb.add_sheet("RECHERCHE")
+search.tab_color = GREEN
+for c, w in enumerate([3, 21, 21, 21, 21, 21, 8], start=1): search.set_col(c, w)
+title_block(search, "RECHERCHE D’UN EMPLOYÉ",
+            "Saisissez exactement un nom ou un ID employé ; la fiche se complète instantanément.", 7)
+search.cell("B5", "Nom ou ID", S["label"]); search.merge("C5:F5"); search.cell("C5", None, S["input"])
+search.merge("B6:F6"); search.cell("B6", "Astuce : les ID suivent le format EMP-0001.", S["note"])
+search.cell("J1", None, S["helper"],
+            formula='IF($C$5="",0,IFERROR(MATCH($C$5,Employes_ID,0),IFERROR(MATCH($C$5,Employes_Nom,0),0)))')
+search.cell("J2", None, S["helper"], formula='IF($J$1=0,"",INDEX(Employes_ID,$J$1))')
+search.cell("J3", None, S["helper"], formula='IFERROR(MATCH($J$2,Pointage_ID,0),0)')
+wb.define_name("RechercheEmployePos", "'RECHERCHE'!$J$1")
+wb.define_name("RechercheID", "'RECHERCHE'!$J$2")
+wb.define_name("RecherchePointagePos", "'RECHERCHE'!$J$3")
+
+search.merge("B8:F8"); search.cell("B8", "  INFORMATIONS EMPLOYÉ", S["section"])
+
+def emp_value(named_range):
+    return f'IF(RechercheEmployePos=0,"-",INDEX({named_range},RechercheEmployePos))'
 
 
+def point_value(named_range):
+    return f'IF(RecherchePointagePos=0,"-",INDEX({named_range},RecherchePointagePos))'
 
-# --------------------------------------------------------------------------- #
-#  8. MONTHLY PAYROLL REPORT
-# --------------------------------------------------------------------------- #
-reg("r_seq",  {"border": border(*ALL), "align": {"horizontal": "center", "vertical": "center"},
-               "font": {"color": GRAY_TX}})
-reg("r_gt_l", {"font": {"bold": True, "size": 11, "color": WHITE}, "fill": GOLD,
-               "align": {"horizontal": "right", "vertical": "center"}, "border": border(*ALL, color=WHITE)})
-reg("r_gt_i", {"font": {"bold": True, "color": NAVY}, "numfmt": INT, "fill": GOLD_LT,
-               "align": {"horizontal": "center", "vertical": "center"}, "border": border(*ALL)})
-reg("r_gt_m", {"font": {"bold": True, "color": NAVY}, "numfmt": MAD, "fill": GOLD_LT,
-               "align": {"horizontal": "right", "vertical": "center"}, "border": border(*ALL)})
+info_rows = [
+    (9, "Nom complet", emp_value("Employes_Nom"), "ID employé", emp_value("Employes_ID")),
+    (10, "Catégorie", emp_value("Employes_Categorie"), "Statut", emp_value("Employes_Statut")),
+    (11, "Date d'embauche", emp_value("Employes_Embauche"), "Téléphone", emp_value("Employes_Telephone")),
+    (12, "Notes", emp_value("Employes_Notes"), "", '""'),
+]
+for r, l1, f1, l2, f2 in info_rows:
+    search.cell(f"B{r}", l1, S["label"]); search.merge(f"C{r}:D{r}")
+    style = S["formula_date"] if r == 11 else S["search_value"]
+    search.write(r, 3, None, style, formula=f1)
+    if l2:
+        search.cell(f"E{r}", l2, S["label"]); search.cell(f"F{r}", None, S["search_value"], formula=f2)
 
-rep = wb.add_sheet("Monthly Report")
-rep.tab_color = GOLD
-rep.show_gridlines = False
-rcols = [("#", 5), ("Employee ID", 14), ("Name", 24), ("Type", 11), ("CIN Number", 14),
-         ("CNSS Number", 15), ("Worked Days", 11), ("OT Hours", 10),
-         ("Regular Salary", 14), ("Overtime Salary", 15), ("Total Salary", 15)]
-for i, (_, w) in enumerate(rcols, start=1):
-    rep.set_col(i, w)
+search.merge("B14:F14"); search.cell("B14", "  POINTAGE ET PAIE", S["section_teal"])
+search_rows = [
+    (15, "Jours travaillés", point_value("Pointage_Travailles"), "Jours absents", point_value("Pointage_Absences"), "formula_center"),
+    (16, "Heures supplémentaires", point_value("Pointage_HS"), "Salaire journalier", 'IF(RecherchePointagePos=0,"-",INDEX(Paie_SalaireJour,RecherchePointagePos))', "search_money"),
+    (17, "Salaire des HS", 'IF(RecherchePointagePos=0,"-",INDEX(Paie_MontantHS,RecherchePointagePos))', "Salaire brut", 'IF(RecherchePointagePos=0,"-",INDEX(Paie_BrutMensuel,RecherchePointagePos))', "search_money"),
+    (18, "Retenues", 'IF(RecherchePointagePos=0,"-",INDEX(Paie_Retenues,RecherchePointagePos))', "Salaire net", 'IF(RecherchePointagePos=0,"-",INDEX(Paie_NetMensuel,RecherchePointagePos))', "search_money"),
+]
+for r, l1, f1, l2, f2, val_style in search_rows:
+    search.cell(f"B{r}", l1, S["label"]); search.cell(f"C{r}", None, S[val_style], formula=f1)
+    search.cell(f"D{r}", l2, S["label"]); search.merge(f"E{r}:F{r}"); search.write(r, 5, None, S[val_style], formula=f2)
+search.merge("B20:C20"); search.cell("B20", "NET À PAYER", S["big_total_label"])
+search.merge("D20:F20"); search.write(20, 4, None, S["big_total_value"],
+                                      formula='IF(RecherchePointagePos=0,0,INDEX(Paie_NetMensuel,RecherchePointagePos))')
+search.set_row(20, 36)
+search.protect = True
+search.setup_page(orientation="portrait", fit_width=1, fit_height=1)
+search.set_print_area("$B$1:$F$20")
 
-rep.merge("A1:K1"); rep.cell("A1", "  MONTHLY PAYROLL REPORT", S["title"]); rep.set_row(1, 34)
-rep.merge("A2:K2"); rep.write(2, 1, None, S["subtitle"],
-          formula='"  Company: "&CompanyName&"     Month: "&PayrollMonth'); rep.set_row(2, 18)
+# ---------------------------------------------------------------------------
+# 6. PAIE (15 Jours)
+# ---------------------------------------------------------------------------
+payroll = wb.add_sheet("PAIE (15 Jours)")
+payroll.tab_color = GOLD
+pay_widths = [15, 25, 21, 12, 11, 9, 9, 9, 13, 12, 13, 12, 13,
+              9, 9, 9, 13, 12, 13, 12, 13, 14, 14, 14]
+for c, w in enumerate(pay_widths, start=1): payroll.set_col(c, w)
+payroll.set_col(25, 2)
+title_block(payroll, "PAIE PAR QUINZAINE ET TOTAL MENSUEL",
+            "Les retenues sont les seules cellules jaunes à saisir ; tous les autres montants proviennent du pointage et des paramètres.", 24)
+payroll.merge("A5:E5"); payroll.cell("A5", "EMPLOYÉ ET TARIFS", S["hdr"])
+payroll.merge("F5:M5"); payroll.cell("F5", "1ÈRE QUINZAINE — JOURS 1 À 15", S["hdr_green"])
+payroll.merge("N5:U5"); payroll.cell("N5", "2ÈME QUINZAINE — JOURS 16 À FIN DU MOIS", S["hdr_blue"])
+payroll.merge("V5:X5"); payroll.cell("V5", "TOTAL MENSUEL", S["hdr_gold"])
+pay_headers = ["ID employé", "Nom complet", "Catégorie", "Salaire / jour", "Taux horaire HS",
+               "Jours Q1", "Abs. Q1", "HS Q1", "Salaire base Q1", "Montant HS Q1", "Brut Q1", "Retenues Q1", "Net Q1",
+               "Jours Q2", "Abs. Q2", "HS Q2", "Salaire base Q2", "Montant HS Q2", "Brut Q2", "Retenues Q2", "Net Q2",
+               "Brut mensuel", "Retenues mensuelles", "Net mensuel"]
+for c, h in enumerate(pay_headers, start=1):
+    style = S["hdr_green"] if 6 <= c <= 13 else S["hdr_blue"] if 14 <= c <= 21 else S["hdr_gold"] if c >= 22 else S["hdr"]
+    payroll.write(PAY_HEADER, c, h, style)
+payroll.set_row(PAY_HEADER, 34)
 
-RHDR = 3
-for i, (h, _) in enumerate(rcols, start=1):
-    rep.write(RHDR, i, h, S["hdr"])
-rep.set_row(RHDR, 26)
+point_prefix = "'POINTAGE'!"
+for r in range(PAY_FIRST, PAY_LAST + 1):
+    ar = ATT_FIRST + (r - PAY_FIRST)
+    payroll.write(r, 1, None, S["formula_center"], formula=f'IF({point_prefix}A{ar}="","",{point_prefix}A{ar})')
+    payroll.write(r, 2, None, S["formula"], formula=f'IF($A{r}="","",{point_prefix}B{ar})')
+    payroll.write(r, 3, None, S["formula_center"], formula=f'IF($A{r}="","",{point_prefix}C{ar})')
+    wage = lookup_category(f"$C{r}", "Categories_Salaire")
+    rate_lookup = lookup_category(f"$C{r}", "Categories_TauxHS")
+    rate = f'IF({rate_lookup}>0,{rate_lookup},TauxHSDefaut)'
+    payroll.write(r, 4, None, S["formula_money"], formula=f'IF($A{r}="","",{wage})')
+    payroll.write(r, 5, None, S["formula_money"], formula=f'IF($A{r}="","",{rate})')
+    # Première quinzaine
+    payroll.write(r, 6, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(ar, range(1, 16), "Présent", point_prefix)})')
+    payroll.write(r, 7, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(ar, range(1, 16), "Absent", point_prefix)})')
+    payroll.write(r, 8, None, S["formula_dec"], formula=f'IF($A{r}="","",{ot_total_formula(ar, range(1, 16), point_prefix)})')
+    payroll.write(r, 9, None, S["formula_money"], formula=f'IF($A{r}="","",$F{r}*$D{r})')
+    payroll.write(r, 10, None, S["formula_money"], formula=f'IF($A{r}="","",$H{r}*$E{r})')
+    payroll.write(r, 11, None, S["formula_total"], formula=f'IF($A{r}="","",$I{r}+$J{r})')
+    payroll.write(r, 12, None, S["input_money"])
+    payroll.write(r, 13, None, S["formula_total"], formula=f'IF($A{r}="","",MAX(0,$K{r}-$L{r}))')
+    # Deuxième quinzaine
+    payroll.write(r, 14, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(ar, range(16, 32), "Présent", point_prefix)})')
+    payroll.write(r, 15, None, S["formula_int"], formula=f'IF($A{r}="","",{status_total_formula(ar, range(16, 32), "Absent", point_prefix)})')
+    payroll.write(r, 16, None, S["formula_dec"], formula=f'IF($A{r}="","",{ot_total_formula(ar, range(16, 32), point_prefix)})')
+    payroll.write(r, 17, None, S["formula_money"], formula=f'IF($A{r}="","",$N{r}*$D{r})')
+    payroll.write(r, 18, None, S["formula_money"], formula=f'IF($A{r}="","",$P{r}*$E{r})')
+    payroll.write(r, 19, None, S["formula_total"], formula=f'IF($A{r}="","",$Q{r}+$R{r})')
+    payroll.write(r, 20, None, S["input_money"])
+    payroll.write(r, 21, None, S["formula_total"], formula=f'IF($A{r}="","",MAX(0,$S{r}-$T{r}))')
+    payroll.write(r, 22, None, S["formula_total"], formula=f'IF($A{r}="","",$K{r}+$S{r})')
+    payroll.write(r, 23, None, S["formula_money"], formula=f'IF($A{r}="","",$L{r}+$T{r})')
+    payroll.write(r, 24, None, S["formula_total"], formula=f'IF($A{r}="","",$M{r}+$U{r})')
+    payroll.write(r, 25, None, S["helper"], formula=f'IF($A{r}="","",$J{r}+$R{r})')
 
-R_FIRST = RHDR + 1                    # 4
-for idx in range(ATT_ROWS):
-    rr = R_FIRST + idx
-    ar = A_FIRST + idx
-    rep.write(rr, 1, None, S["r_seq"], formula=f'IF($B{rr}="","",ROW()-{R_FIRST}+1)')
-    rep.write(rr, 2, None, S["f_id"],  formula=f'IF({ATT}A{ar}="","",{ATT}A{ar})')
-    rep.write(rr, 3, None, S["f_txt"], formula=f'IF($B{rr}="","",{ATT}B{ar})')
-    rep.write(rr, 4, None, S["f_ctr"], formula=f'IF($B{rr}="","",{ATT}C{ar})')
-    rep.write(rr, 5, None, S["f_ctr"],
-              formula=(f'IF($B{rr}="","",IFERROR(VLOOKUP($B{rr},Workers_Data,3,FALSE),'
-                       f'IFERROR(VLOOKUP($B{rr},Laborers_Data,3,FALSE),"")))'))
-    rep.write(rr, 6, None, S["f_ctr"],
-              formula=(f'IF($B{rr}="","",IFERROR(VLOOKUP($B{rr},Workers_Data,4,FALSE),'
-                       f'IFERROR(VLOOKUP($B{rr},Laborers_Data,4,FALSE),"")))'))
-    rep.write(rr, 7, None, S["f_int"], formula=f'IF($B{rr}="","",{ATT}{BNc}{ar})')
-    rep.write(rr, 8, None, S["f_dec"], formula=f'IF($B{rr}="","",{ATT}{BOc}{ar})')
-    rep.write(rr, 9, None, S["f_mad"], formula=f'IF($B{rr}="","",{ATT}{BPc}{ar})')
-    rep.write(rr, 10, None, S["f_mad"], formula=f'IF($B{rr}="","",{ATT}{BQc}{ar})')
-    rep.write(rr, 11, None, S["f_mad_b"], formula=f'IF($B{rr}="","",{ATT}{BRc}{ar})')
+payroll.add_number_validation(f"L{PAY_FIRST}:L{PAY_LAST} T{PAY_FIRST}:T{PAY_LAST}", "greaterThanOrEqual", "0", decimal=True)
+payroll.add_cond_expr(f"A{PAY_FIRST}:X{PAY_LAST}", "MOD(ROW(),2)=0", banding_dxf, 8)
+payroll.add_table(f"A{PAY_HEADER}:X{PAY_LAST}", "tblPaie", pay_headers, "TableStyleMedium4")
+payroll.freeze_panes(PAY_HEADER, 3)
+payroll.protect = True
+payroll.setup_page(orientation="landscape", fit_width=1, fit_height=0)
+payroll.set_print_area(f"$A$1:$X${PAY_LAST}")
 
-R_LAST = R_FIRST + ATT_ROWS - 1
-GT = R_LAST + 1
-rep.merge(f"A{GT}:F{GT}"); rep.cell(f"A{GT}", "GRAND TOTAL   ", S["r_gt_l"]); rep.set_row(GT, 24)
-rep.write(GT, 7, None, S["r_gt_i"], formula=f"SUM(G{R_FIRST}:G{R_LAST})")
-rep.write(GT, 8, None, S["r_gt_i"], formula=f"SUM(H{R_FIRST}:H{R_LAST})")
-rep.write(GT, 9, None, S["r_gt_m"], formula=f"SUM(I{R_FIRST}:I{R_LAST})")
-rep.write(GT, 10, None, S["r_gt_m"], formula=f"SUM(J{R_FIRST}:J{R_LAST})")
-rep.write(GT, 11, None, S["r_gt_m"], formula=f"SUM(K{R_FIRST}:K{R_LAST})")
+wb.define_name("Paie_SalaireJour", f"'PAIE (15 Jours)'!$D${PAY_FIRST}:$D${PAY_LAST}")
+wb.define_name("Paie_TauxHS", f"'PAIE (15 Jours)'!$E${PAY_FIRST}:$E${PAY_LAST}")
+wb.define_name("Paie_Jours1", f"'PAIE (15 Jours)'!$F${PAY_FIRST}:$F${PAY_LAST}")
+wb.define_name("Paie_HS1", f"'PAIE (15 Jours)'!$H${PAY_FIRST}:$H${PAY_LAST}")
+wb.define_name("Paie_MontantHS1", f"'PAIE (15 Jours)'!$J${PAY_FIRST}:$J${PAY_LAST}")
+wb.define_name("Paie_Brut1", f"'PAIE (15 Jours)'!$K${PAY_FIRST}:$K${PAY_LAST}")
+wb.define_name("Paie_Retenues1", f"'PAIE (15 Jours)'!$L${PAY_FIRST}:$L${PAY_LAST}")
+wb.define_name("Paie_Net1", f"'PAIE (15 Jours)'!$M${PAY_FIRST}:$M${PAY_LAST}")
+wb.define_name("Paie_Jours2", f"'PAIE (15 Jours)'!$N${PAY_FIRST}:$N${PAY_LAST}")
+wb.define_name("Paie_HS2", f"'PAIE (15 Jours)'!$P${PAY_FIRST}:$P${PAY_LAST}")
+wb.define_name("Paie_MontantHS2", f"'PAIE (15 Jours)'!$R${PAY_FIRST}:$R${PAY_LAST}")
+wb.define_name("Paie_Brut2", f"'PAIE (15 Jours)'!$S${PAY_FIRST}:$S${PAY_LAST}")
+wb.define_name("Paie_Retenues2", f"'PAIE (15 Jours)'!$T${PAY_FIRST}:$T${PAY_LAST}")
+wb.define_name("Paie_Net2", f"'PAIE (15 Jours)'!$U${PAY_FIRST}:$U${PAY_LAST}")
+wb.define_name("Paie_MontantHS", f"'PAIE (15 Jours)'!$Y${PAY_FIRST}:$Y${PAY_LAST}")
+wb.define_name("Paie_BrutMensuel", f"'PAIE (15 Jours)'!$V${PAY_FIRST}:$V${PAY_LAST}")
+wb.define_name("Paie_Retenues", f"'PAIE (15 Jours)'!$W${PAY_FIRST}:$W${PAY_LAST}")
+wb.define_name("Paie_NetMensuel", f"'PAIE (15 Jours)'!$X${PAY_FIRST}:$X${PAY_LAST}")
 
-rep.add_cond_expr(f"A{R_FIRST}:K{R_LAST}", "MOD(ROW(),2)=0", band_dxf, priority=6)
-rep.freeze_panes(RHDR, 0)
-rep.protect = True
-rep.setup_page(orientation="landscape", fit_width=1, fit_height=0)
-rep.set_print_area(f"$A$1:$K${GT}")
+# ---------------------------------------------------------------------------
+# 7. IMPRESSION
+# ---------------------------------------------------------------------------
+printing = wb.add_sheet("IMPRESSION")
+printing.tab_color = GRAY
+for c, w in enumerate([16, 25, 18, 14, 14, 14, 14, 14, 14, 14], start=1): printing.set_col(c, w)
+navigation(printing, printing.name)
+printing.merge("A2:H2"); printing.write(2, 1, None, S["title_center"], formula="NomSociete")
+printing.merge("A3:H3"); printing.write(3, 1, None, S["subtitle"],
+                                       formula='"  RAPPORT DE PAIE — "&MoisLibelle&"     |     "&AdresseSociete&"     |     "&TelephoneSociete')
+printing.merge("I2:J3"); printing.cell("I2", "LOGO", S["logo"])
+printing.cell("A5", "Mode d'impression", S["label"]); printing.merge("B5:C5"); printing.cell("B5", "Un employé", S["input_center"])
+printing.cell("D5", "ID employé", S["label"]); printing.merge("E5:F5"); printing.cell("E5", "EMP-0001", S["input_center"])
+printing.cell("G5", "Période", S["label"]); printing.merge("H5:J5"); printing.cell("H5", "Mois complet", S["input_center"])
+printing.add_list_validation("B5", '"Un employé,Tous les employés"', allow_blank=False)
+printing.add_list_validation("E5", "Pointage_ID")
+printing.add_list_validation("H5", '"1ère quinzaine,2ème quinzaine,Mois complet"', allow_blank=False)
+printing.merge("A6:J6"); printing.write(6, 1, None, S["note"],
+                                       formula='"Période de paie configurée : "&PeriodePaie&" jours     |     Devise : "&Devise')
+printing.cell("L1", None, S["helper"], formula='IFERROR(MATCH($E$5,Pointage_ID,0),0)')
+wb.define_name("ImpressionPos", "'IMPRESSION'!$L$1")
 
-# --------------------------------------------------------------------------- #
-#  SAVE
-# --------------------------------------------------------------------------- #
+
+def period_value(first_range, second_range, month_range):
+    return (f'IF(ImpressionPos=0,"-",IF($H$5="1ère quinzaine",INDEX({first_range},ImpressionPos),'
+            f'IF($H$5="2ème quinzaine",INDEX({second_range},ImpressionPos),INDEX({month_range},ImpressionPos))))')
+
+
+def only_one(formula):
+    return f'IF($B$5<>"Un employé","",{formula})'
+
+# Bulletin individuel
+printing.merge("A8:J8"); printing.cell("A8", None, S["section"], formula='IF($B$5="Un employé","  BULLETIN DE PAIE INDIVIDUEL","")')
+individual_fields = [
+    (9, "ID employé", 'IF(ImpressionPos=0,"-",INDEX(Pointage_ID,ImpressionPos))', "Nom complet", 'IF(ImpressionPos=0,"-",INDEX(Pointage_Nom,ImpressionPos))'),
+    (10, "Catégorie", 'IF(ImpressionPos=0,"-",INDEX(Pointage_Categorie,ImpressionPos))', "Période", '$H$5'),
+    (11, "Jours travaillés", period_value("Paie_Jours1", "Paie_Jours2", "Pointage_Travailles"), "Heures HS", period_value("Paie_HS1", "Paie_HS2", "Pointage_HS")),
+    (12, "Salaire journalier", 'IF(ImpressionPos=0,"-",INDEX(Paie_SalaireJour,ImpressionPos))', "Salaire HS", period_value("Paie_MontantHS1", "Paie_MontantHS2", "Paie_MontantHS")),
+    (13, "Salaire brut", period_value("Paie_Brut1", "Paie_Brut2", "Paie_BrutMensuel"), "Retenues", period_value("Paie_Retenues1", "Paie_Retenues2", "Paie_Retenues")),
+]
+for r, l1, f1, l2, f2 in individual_fields:
+    printing.cell(f"A{r}", None, S["label"], formula=f'IF($B$5="Un employé","{l1}","")')
+    printing.merge(f"B{r}:E{r}"); printing.write(r, 2, None, S["search_value"], formula=only_one(f1))
+    printing.cell(f"F{r}", None, S["label"], formula=f'IF($B$5="Un employé","{l2}","")')
+    printing.merge(f"G{r}:J{r}")
+    money_row = r in (12, 13)
+    printing.write(r, 7, None, S["search_money"] if money_row else S["search_value"], formula=only_one(f2))
+printing.merge("A15:D15"); printing.cell("A15", None, S["big_total_label"], formula='IF($B$5="Un employé","NET À PAYER","")')
+printing.merge("E15:J15"); printing.write(15, 5, None, S["big_total_value"],
+                                         formula=only_one(period_value("Paie_Net1", "Paie_Net2", "Paie_NetMensuel")))
+printing.set_row(15, 36)
+printing.merge("A20:D20"); printing.cell("A20", None, S["signature"], formula='IF($B$5="Un employé","Signature de l’employé","")')
+printing.merge("G20:J20"); printing.cell("G20", None, S["signature"], formula='IF($B$5="Un employé","Visa et cachet de l’entreprise","")')
+printing.merge("A23:J23"); printing.write(23, 1, None, S["note"],
+                                         formula='IF($B$5="Un employé","Édité le "&TEXT(TODAY(),"dd/mm/yyyy"),"")')
+
+# État collectif
+PRINT_HDR = 27
+print_headers = ["ID", "Nom complet", "Catégorie", "Jours", "HS", "Salaire / jour", "Salaire HS", "Brut", "Retenues", "Net"]
+for c, h in enumerate(print_headers, start=1):
+    printing.write(PRINT_HDR, c, None, S["hdr"], formula=f'IF($B$5="Tous les employés","{h}","")')
+for i in range(EMPLOYEE_CAPACITY):
+    r = PRINT_HDR + 1 + i
+    pos = i + 1
+    id_formula = f'IFERROR(INDEX(Pointage_ID,{pos}),"")'
+    visible = f'AND($B$5="Tous les employés",{id_formula}<>"")'
+    printing.write(r, 1, None, S["formula_center"], formula=f'IF({visible},{id_formula},"")')
+    printing.write(r, 2, None, S["formula"], formula=f'IF({visible},INDEX(Pointage_Nom,{pos}),"")')
+    printing.write(r, 3, None, S["formula_center"], formula=f'IF({visible},INDEX(Pointage_Categorie,{pos}),"")')
+    printing.write(r, 4, None, S["formula_int"], formula=f'IF({visible},{period_value("Paie_Jours1", "Paie_Jours2", "Pointage_Travailles").replace("ImpressionPos", str(pos))},"")')
+    printing.write(r, 5, None, S["formula_dec"], formula=f'IF({visible},{period_value("Paie_HS1", "Paie_HS2", "Pointage_HS").replace("ImpressionPos", str(pos))},"")')
+    printing.write(r, 6, None, S["formula_money"], formula=f'IF({visible},INDEX(Paie_SalaireJour,{pos}),"")')
+    printing.write(r, 7, None, S["formula_money"], formula=f'IF({visible},{period_value("Paie_MontantHS1", "Paie_MontantHS2", "Paie_MontantHS").replace("ImpressionPos", str(pos))},"")')
+    printing.write(r, 8, None, S["formula_money"], formula=f'IF({visible},{period_value("Paie_Brut1", "Paie_Brut2", "Paie_BrutMensuel").replace("ImpressionPos", str(pos))},"")')
+    printing.write(r, 9, None, S["formula_money"], formula=f'IF({visible},{period_value("Paie_Retenues1", "Paie_Retenues2", "Paie_Retenues").replace("ImpressionPos", str(pos))},"")')
+    printing.write(r, 10, None, S["formula_total"], formula=f'IF({visible},{period_value("Paie_Net1", "Paie_Net2", "Paie_NetMensuel").replace("ImpressionPos", str(pos))},"")')
+
+printing.add_cond_expr(f"A{PRINT_HDR + 1}:J{PRINT_HDR + EMPLOYEE_CAPACITY}", "MOD(ROW(),2)=0", banding_dxf, 8)
+printing.freeze_panes(6, 0)
+printing.protect = True
+printing.setup_page(orientation="landscape", fit_width=1, fit_height=0)
+# Zone d'impression dynamique selon le mode et le dernier matricule actif.
+last_collective_row = (f"{PRINT_HDR}+IFERROR(LOOKUP(2,1/(Pointage_ID<>\"\"),"
+                       f"ROW(Pointage_ID)-MIN(ROW(Pointage_ID))+1),1)")
+wb.define_name("_xlnm.Print_Area",
+               f"OFFSET('IMPRESSION'!$A$1,0,0,IF('IMPRESSION'!$B$5=\"Un employé\",23,{last_collective_row}),10)",
+               printing)
+
+# ---------------------------------------------------------------------------
+# Enregistrement
+# ---------------------------------------------------------------------------
 OUT = "Payroll_Management_System.xlsx"
 wb.save(OUT)
-print("Saved", OUT)
+print("Classeur généré :", OUT)
