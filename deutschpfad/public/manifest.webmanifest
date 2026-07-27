@@ -1,0 +1,33 @@
+{
+  "name": "DeutschPfad — Learn German A1 to B2",
+  "short_name": "DeutschPfad",
+  "description": "Complete German learning platform: courses, grammar, flashcards, mock exams and printable PDFs.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4ed8",
+  "categories": ["education", "productivity"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Daily lesson", "url": "/daily" },
+    { "name": "Flashcards", "url": "/flashcards" },
+    { "name": "Mock exams", "url": "/exams" },
+    { "name": "Dictionary", "url": "/dictionary" }
+  ]
+}

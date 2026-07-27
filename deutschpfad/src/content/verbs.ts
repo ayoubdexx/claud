@@ -1,0 +1,282 @@
+import type { VerbEntry } from "@/lib/types";
+
+/**
+ * Verb database used by the conjugation engine (src/lib/conjugate.ts).
+ * `preteriteStem` + `strong` drive the Präteritum, `partizip2` the compound
+ * tenses, and `presentOverrides` the irregular du / er-sie-es forms.
+ */
+export const verbs: VerbEntry[] = [
+  {
+    infinitive: "sein", en: "to be", level: "A1", kind: "auxiliary",
+    presentOverrides: { 0: "bin", 1: "bist", 2: "ist", 3: "sind", 4: "seid", 5: "sind" },
+    preteriteStem: "war", strong: true, partizip2: "gewesen", auxiliary: "sein", konjunktiv2Stem: "wär",
+    notes: "The most irregular German verb. Konjunktiv I: ich sei, er sei.",
+    examples: [{ de: "Ich bin seit einem Jahr in Deutschland.", en: "I've been in Germany for a year." }],
+  },
+  {
+    infinitive: "haben", en: "to have", level: "A1", kind: "auxiliary",
+    presentOverrides: { 1: "hast", 2: "hat" },
+    preteriteStem: "hatt", partizip2: "gehabt", auxiliary: "haben", konjunktiv2Stem: "hätt",
+    notes: "Auxiliary for most Perfekt forms.",
+    examples: [{ de: "Hast du heute Zeit?", en: "Do you have time today?" }],
+  },
+  {
+    infinitive: "werden", en: "to become", level: "A1", kind: "irregular",
+    presentOverrides: { 1: "wirst", 2: "wird" },
+    preteriteStem: "wurd", strong: true, partizip2: "geworden", auxiliary: "sein", konjunktiv2Stem: "würd",
+    notes: "Also the auxiliary of the passive and of Futur I.",
+    examples: [{ de: "Es wird kalt.", en: "It's getting cold." }],
+  },
+  {
+    infinitive: "wohnen", en: "to live, reside", level: "A1", kind: "regular",
+    preteriteStem: "wohnt", partizip2: "gewohnt", auxiliary: "haben",
+    examples: [{ de: "Ich wohne in Leipzig.", en: "I live in Leipzig." }],
+  },
+  {
+    infinitive: "arbeiten", en: "to work", level: "A1", kind: "regular",
+    preteriteStem: "arbeitet", partizip2: "gearbeitet", auxiliary: "haben",
+    notes: "Stem ends in -t, so an -e is inserted: du arbeitest.",
+    examples: [{ de: "Er arbeitet bei Siemens.", en: "He works at Siemens." }],
+  },
+  {
+    infinitive: "lernen", en: "to learn", level: "A1", kind: "regular",
+    preteriteStem: "lernt", partizip2: "gelernt", auxiliary: "haben",
+    examples: [{ de: "Wir lernen jeden Tag Deutsch.", en: "We learn German every day." }],
+  },
+  {
+    infinitive: "heißen", en: "to be called", level: "A1", kind: "irregular",
+    presentOverrides: { 1: "heißt" },
+    preteriteStem: "hieß", strong: true, partizip2: "geheißen", auxiliary: "haben",
+    notes: "Stem in -ß: du heißt (no extra -s).",
+    examples: [{ de: "Wie heißen Sie?", en: "What is your name?" }],
+  },
+  {
+    infinitive: "sprechen", en: "to speak", level: "A1", kind: "irregular",
+    presentStemChange: "sprich",
+    preteriteStem: "sprach", strong: true, partizip2: "gesprochen", auxiliary: "haben",
+    notes: "e → i in du and er/sie/es.",
+    examples: [{ de: "Sprichst du Deutsch?", en: "Do you speak German?" }],
+  },
+  {
+    infinitive: "sehen", en: "to see", level: "A1", kind: "irregular",
+    presentStemChange: "sieh",
+    preteriteStem: "sah", strong: true, partizip2: "gesehen", auxiliary: "haben",
+    examples: [{ de: "Ich sehe dich morgen.", en: "I'll see you tomorrow." }],
+  },
+  {
+    infinitive: "lesen", en: "to read", level: "A1", kind: "irregular",
+    presentOverrides: { 1: "liest", 2: "liest" },
+    preteriteStem: "las", strong: true, partizip2: "gelesen", auxiliary: "haben",
+    examples: [{ de: "Er liest die Zeitung.", en: "He reads the newspaper." }],
+  },
+  {
+    infinitive: "essen", en: "to eat", level: "A1", kind: "irregular",
+    presentOverrides: { 1: "isst", 2: "isst" },
+    preteriteStem: "aß", strong: true, partizip2: "gegessen", auxiliary: "haben",
+    examples: [{ de: "Was isst du zum Frühstück?", en: "What do you eat for breakfast?" }],
+  },
+  {
+    infinitive: "trinken", en: "to drink", level: "A1", kind: "irregular",
+    preteriteStem: "trank", strong: true, partizip2: "getrunken", auxiliary: "haben",
+    examples: [{ de: "Ich trinke Wasser.", en: "I drink water." }],
+  },
+  {
+    infinitive: "fahren", en: "to drive, go", level: "A1", kind: "irregular",
+    presentStemChange: "fähr",
+    preteriteStem: "fuhr", strong: true, partizip2: "gefahren", auxiliary: "sein",
+    notes: "a → ä in du and er/sie/es. sein because it is a movement verb.",
+    examples: [{ de: "Wir fahren nach Berlin.", en: "We're going to Berlin." }],
+  },
+  {
+    infinitive: "gehen", en: "to go, walk", level: "A1", kind: "irregular",
+    preteriteStem: "ging", strong: true, partizip2: "gegangen", auxiliary: "sein",
+    examples: [{ de: "Ich gehe zu Fuß.", en: "I'm going on foot." }],
+  },
+  {
+    infinitive: "kommen", en: "to come", level: "A1", kind: "irregular",
+    preteriteStem: "kam", strong: true, partizip2: "gekommen", auxiliary: "sein",
+    examples: [{ de: "Woher kommen Sie?", en: "Where do you come from?" }],
+  },
+  {
+    infinitive: "nehmen", en: "to take", level: "A1", kind: "irregular",
+    presentOverrides: { 1: "nimmst", 2: "nimmt" },
+    preteriteStem: "nahm", strong: true, partizip2: "genommen", auxiliary: "haben",
+    examples: [{ de: "Ich nehme den Bus.", en: "I'll take the bus." }],
+  },
+  {
+    infinitive: "geben", en: "to give", level: "A1", kind: "irregular",
+    presentStemChange: "gib",
+    preteriteStem: "gab", strong: true, partizip2: "gegeben", auxiliary: "haben",
+    notes: "es gibt = there is / there are.",
+    examples: [{ de: "Gib mir bitte das Buch.", en: "Give me the book, please." }],
+  },
+  {
+    infinitive: "können", en: "can, to be able to", level: "A1", kind: "modal",
+    presentOverrides: { 0: "kann", 1: "kannst", 2: "kann" },
+    preteriteStem: "konnt", partizip2: "gekonnt", auxiliary: "haben", konjunktiv2Stem: "könnt",
+    notes: "Modal: no ending in ich and er/sie/es.",
+    examples: [{ de: "Ich kann schwimmen.", en: "I can swim." }],
+  },
+  {
+    infinitive: "müssen", en: "must, to have to", level: "A1", kind: "modal",
+    presentOverrides: { 0: "muss", 1: "musst", 2: "muss" },
+    preteriteStem: "musst", partizip2: "gemusst", auxiliary: "haben", konjunktiv2Stem: "müsst",
+    examples: [{ de: "Ich muss arbeiten.", en: "I have to work." }],
+  },
+  {
+    infinitive: "wollen", en: "to want", level: "A1", kind: "modal",
+    presentOverrides: { 0: "will", 1: "willst", 2: "will" },
+    preteriteStem: "wollt", partizip2: "gewollt", auxiliary: "haben", konjunktiv2Stem: "wollt",
+    examples: [{ de: "Er will Arzt werden.", en: "He wants to become a doctor." }],
+  },
+  {
+    infinitive: "dürfen", en: "may, to be allowed", level: "A1", kind: "modal",
+    presentOverrides: { 0: "darf", 1: "darfst", 2: "darf" },
+    preteriteStem: "durft", partizip2: "gedurft", auxiliary: "haben", konjunktiv2Stem: "dürft",
+    examples: [{ de: "Darf ich hier parken?", en: "May I park here?" }],
+  },
+  {
+    infinitive: "sollen", en: "should, to be supposed to", level: "A1", kind: "modal",
+    presentOverrides: { 0: "soll", 1: "sollst", 2: "soll" },
+    preteriteStem: "sollt", partizip2: "gesollt", auxiliary: "haben", konjunktiv2Stem: "sollt",
+    examples: [{ de: "Du sollst mehr schlafen.", en: "You should sleep more." }],
+  },
+  {
+    infinitive: "mögen", en: "to like", level: "A1", kind: "modal",
+    presentOverrides: { 0: "mag", 1: "magst", 2: "mag" },
+    preteriteStem: "mocht", partizip2: "gemocht", auxiliary: "haben", konjunktiv2Stem: "möcht",
+    notes: "möchte (Konjunktiv II) is the polite form used for wishes.",
+    examples: [{ de: "Ich möchte einen Kaffee.", en: "I'd like a coffee." }],
+  },
+  {
+    infinitive: "aufstehen", en: "to get up", level: "A1", kind: "separable", separablePrefix: "auf",
+    preteriteStem: "stand", strong: true, partizip2: "aufgestanden", auxiliary: "sein",
+    examples: [{ de: "Ich stehe um sechs Uhr auf.", en: "I get up at six." }],
+  },
+  {
+    infinitive: "anrufen", en: "to call (phone)", level: "A1", kind: "separable", separablePrefix: "an",
+    preteriteStem: "rief", strong: true, partizip2: "angerufen", auxiliary: "haben",
+    examples: [{ de: "Ruf mich bitte an!", en: "Please call me!" }],
+  },
+  {
+    infinitive: "einkaufen", en: "to shop", level: "A1", kind: "separable", separablePrefix: "ein",
+    preteriteStem: "kauft", partizip2: "eingekauft", auxiliary: "haben",
+    examples: [{ de: "Wir kaufen am Samstag ein.", en: "We shop on Saturday." }],
+  },
+  {
+    infinitive: "anfangen", en: "to begin", level: "A2", kind: "separable", separablePrefix: "an",
+    presentStemChange: "fäng",
+    preteriteStem: "fing", strong: true, partizip2: "angefangen", auxiliary: "haben",
+    examples: [{ de: "Der Kurs fängt um neun an.", en: "The course starts at nine." }],
+  },
+  {
+    infinitive: "verstehen", en: "to understand", level: "A1", kind: "irregular",
+    preteriteStem: "verstand", strong: true, partizip2: "verstanden", auxiliary: "haben",
+    notes: "Inseparable ver-: no ge- in the Partizip II.",
+    examples: [{ de: "Ich verstehe die Frage nicht.", en: "I don't understand the question." }],
+  },
+  {
+    infinitive: "bekommen", en: "to get, receive", level: "A2", kind: "irregular",
+    preteriteStem: "bekam", strong: true, partizip2: "bekommen", auxiliary: "haben",
+    notes: "Inseparable be-. False friend: not 'to become'.",
+    examples: [{ de: "Ich habe eine E-Mail bekommen.", en: "I received an email." }],
+  },
+  {
+    infinitive: "bleiben", en: "to stay", level: "A1", kind: "irregular",
+    preteriteStem: "blieb", strong: true, partizip2: "geblieben", auxiliary: "sein",
+    examples: [{ de: "Ich bleibe zu Hause.", en: "I'm staying at home." }],
+  },
+  {
+    infinitive: "schlafen", en: "to sleep", level: "A1", kind: "irregular",
+    presentStemChange: "schläf",
+    preteriteStem: "schlief", strong: true, partizip2: "geschlafen", auxiliary: "haben",
+    examples: [{ de: "Er schläft acht Stunden.", en: "He sleeps eight hours." }],
+  },
+  {
+    infinitive: "helfen", en: "to help", level: "A2", kind: "irregular",
+    presentStemChange: "hilf",
+    preteriteStem: "half", strong: true, partizip2: "geholfen", auxiliary: "haben",
+    notes: "Takes the dative: jemandem helfen.",
+    examples: [{ de: "Kannst du mir helfen?", en: "Can you help me?" }],
+  },
+  {
+    infinitive: "finden", en: "to find", level: "A1", kind: "irregular",
+    preteriteStem: "fand", strong: true, partizip2: "gefunden", auxiliary: "haben",
+    notes: "Stem in -d: du findest, er findet.",
+    examples: [{ de: "Ich finde den Kurs interessant.", en: "I find the course interesting." }],
+  },
+  {
+    infinitive: "schreiben", en: "to write", level: "A1", kind: "irregular",
+    preteriteStem: "schrieb", strong: true, partizip2: "geschrieben", auxiliary: "haben",
+    examples: [{ de: "Ich schreibe eine E-Mail.", en: "I'm writing an email." }],
+  },
+  {
+    infinitive: "wissen", en: "to know (a fact)", level: "A2", kind: "mixed",
+    presentOverrides: { 0: "weiß", 1: "weißt", 2: "weiß" },
+    preteriteStem: "wusst", partizip2: "gewusst", auxiliary: "haben", konjunktiv2Stem: "wüsst",
+    examples: [{ de: "Ich weiß es nicht.", en: "I don't know." }],
+  },
+  {
+    infinitive: "denken", en: "to think", level: "A2", kind: "mixed",
+    preteriteStem: "dacht", partizip2: "gedacht", auxiliary: "haben",
+    notes: "Mixed verb: vowel change + -te ending. denken an + Akkusativ.",
+    examples: [{ de: "Ich denke oft an meine Familie.", en: "I often think of my family." }],
+  },
+  {
+    infinitive: "bringen", en: "to bring", level: "A2", kind: "mixed",
+    preteriteStem: "bracht", partizip2: "gebracht", auxiliary: "haben",
+    examples: [{ de: "Er bringt die Unterlagen mit.", en: "He's bringing the documents." }],
+  },
+  {
+    infinitive: "sich bewerben", en: "to apply", level: "B1", kind: "reflexive",
+    presentStemChange: "bewirb",
+    preteriteStem: "bewarb", strong: true, partizip2: "beworben", auxiliary: "haben",
+    notes: "sich bewerben um + Akkusativ (Stelle), bei + Dativ (Firma).",
+    examples: [{ de: "Ich bewerbe mich um eine Ausbildung.", en: "I'm applying for a training place." }],
+  },
+  {
+    infinitive: "sich freuen", en: "to be glad", level: "A2", kind: "reflexive",
+    preteriteStem: "freut", partizip2: "gefreut", auxiliary: "haben",
+    notes: "sich freuen auf (future) / über (present, past).",
+    examples: [{ de: "Ich freue mich auf den Kurs.", en: "I'm looking forward to the course." }],
+  },
+  {
+    infinitive: "teilnehmen", en: "to take part", level: "B1", kind: "separable", separablePrefix: "teil",
+    presentOverrides: { 1: "nimmst", 2: "nimmt" },
+    preteriteStem: "nahm", strong: true, partizip2: "teilgenommen", auxiliary: "haben",
+    notes: "teilnehmen an + Dativ.",
+    examples: [{ de: "Wir nehmen an dem Seminar teil.", en: "We're taking part in the seminar." }],
+  },
+  {
+    infinitive: "vereinbaren", en: "to arrange, agree", level: "B1", kind: "regular",
+    preteriteStem: "vereinbart", partizip2: "vereinbart", auxiliary: "haben",
+    notes: "Inseparable ver-: no ge-.",
+    examples: [{ de: "Ich möchte einen Termin vereinbaren.", en: "I'd like to make an appointment." }],
+  },
+  {
+    infinitive: "einreichen", en: "to submit", level: "B1", kind: "separable", separablePrefix: "ein",
+    preteriteStem: "reicht", partizip2: "eingereicht", auxiliary: "haben",
+    examples: [{ de: "Reichen Sie die Unterlagen bis Freitag ein.", en: "Submit the documents by Friday." }],
+  },
+  {
+    infinitive: "berücksichtigen", en: "to take into account", level: "B2", kind: "regular",
+    preteriteStem: "berücksichtigt", partizip2: "berücksichtigt", auxiliary: "haben",
+    examples: [{ de: "Wir berücksichtigen Ihre Erfahrung.", en: "We take your experience into account." }],
+  },
+  {
+    infinitive: "zunehmen", en: "to increase", level: "B2", kind: "separable", separablePrefix: "zu",
+    presentOverrides: { 1: "nimmst", 2: "nimmt" },
+    preteriteStem: "nahm", strong: true, partizip2: "zugenommen", auxiliary: "haben",
+    examples: [{ de: "Die Nachfrage hat stark zugenommen.", en: "Demand has increased sharply." }],
+  },
+  {
+    infinitive: "sich durchsetzen", en: "to prevail, assert oneself", level: "B2", kind: "separable", separablePrefix: "durch",
+    preteriteStem: "setzt", partizip2: "durchgesetzt", auxiliary: "haben",
+    examples: [{ de: "Sie hat ihren Vorschlag durchgesetzt.", en: "She pushed her proposal through." }],
+  },
+  {
+    infinitive: "voraussetzen", en: "to presuppose, require", level: "B2", kind: "separable", separablePrefix: "voraus",
+    preteriteStem: "setzt", partizip2: "vorausgesetzt", auxiliary: "haben",
+    examples: [{ de: "Die Stelle setzt B2-Kenntnisse voraus.", en: "The position requires B2 skills." }],
+  },
+];

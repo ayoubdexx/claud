@@ -1,0 +1,225 @@
+import type { VocabDeck } from "@/lib/types";
+
+export const b1Decks: VocabDeck[] = [
+  {
+    id: "b1-education",
+    slug: "bildung-ausbildung",
+    title: "Education & training",
+    titleDe: "Bildung und Ausbildung",
+    level: "B1",
+    topic: "Education",
+    icon: "GraduationCap",
+    description: "School system, qualifications and recognition of foreign diplomas.",
+    words: [
+      {
+        id: "b1-b-1", de: "Abschluss", article: "der", plural: "die Abschlüsse", en: "degree, qualification", ipa: "ˈapʃlʊs", pos: "noun", level: "B1", topic: "education", difficulty: 2,
+        example: { de: "Mein Abschluss wurde in Deutschland anerkannt.", en: "My qualification was recognised in Germany." },
+        expressions: [{ de: "einen Abschluss machen", en: "to graduate" }],
+        memoryTip: "abschließen (to complete) → der Abschluss.",
+      },
+      {
+        id: "b1-b-2", de: "anerkennen", en: "to recognise (officially)", ipa: "ˈanʔɛɐ̯ˌkɛnən", pos: "verb", level: "B1", topic: "education", difficulty: 3,
+        example: { de: "Die Behörde erkennt ausländische Zeugnisse an.", en: "The authority recognises foreign certificates." },
+        expressions: [{ de: "die Anerkennung", en: "recognition" }],
+        memoryTip: "Separable: Sie erkennt das Zeugnis an.",
+      },
+      {
+        id: "b1-b-3", de: "Zeugnis", article: "das", plural: "die Zeugnisse", en: "certificate, school report", ipa: "ˈt͡sɔɪknɪs", pos: "noun", level: "B1", topic: "education", difficulty: 2,
+        example: { de: "Bitte legen Sie Ihre Zeugnisse in Kopie bei.", en: "Please enclose copies of your certificates." },
+        memoryTip: "-nis nouns are usually neuter.",
+      },
+      {
+        id: "b1-b-4", de: "Praktikum", article: "das", plural: "die Praktika", en: "internship", ipa: "ˈpʁaktikʊm", pos: "noun", level: "B1", topic: "education", difficulty: 2,
+        example: { de: "Ich habe ein dreimonatiges Praktikum in einer Klinik gemacht.", en: "I did a three-month internship at a clinic." },
+        memoryTip: "Latin plural: Praktika.",
+      },
+      {
+        id: "b1-b-5", de: "Fachkraft", article: "die", plural: "die Fachkräfte", en: "skilled worker", ipa: "ˈfaxkʁaft", pos: "noun", level: "B1", topic: "education", difficulty: 3,
+        example: { de: "In Deutschland fehlen Fachkräfte im Pflegebereich.", en: "Germany lacks skilled workers in the care sector." },
+        expressions: [{ de: "der Fachkräftemangel", en: "skilled labour shortage" }],
+        memoryTip: "Fach (specialist field) + Kraft (worker).",
+      },
+      {
+        id: "b1-b-6", de: "Weiterbildung", article: "die", plural: "die Weiterbildungen", en: "further training", ipa: "ˈvaɪtɐˌbɪldʊŋ", pos: "noun", level: "B1", topic: "education", difficulty: 2,
+        example: { de: "Die Firma bezahlt eine Weiterbildung in Projektmanagement.", en: "The company pays for further training in project management." },
+        memoryTip: "weiter (further) + Bildung (education).",
+      },
+      {
+        id: "b1-b-7", de: "Voraussetzung", article: "die", plural: "die Voraussetzungen", en: "prerequisite, requirement", ipa: "foˈʁaʊsˌzɛt͡sʊŋ", pos: "noun", level: "B1", topic: "education", difficulty: 3,
+        example: { de: "Deutschkenntnisse auf B2-Niveau sind Voraussetzung.", en: "German at B2 level is a requirement." },
+        memoryTip: "voraus + setzen = what is set in advance.",
+      },
+      {
+        id: "b1-b-8", de: "Bewerbungsunterlagen", article: "die", plural: "die Bewerbungsunterlagen", en: "application documents", ipa: "bəˈvɛʁbʊŋsʔʊntɐˌlaːɡn̩", pos: "noun", level: "B1", topic: "education", difficulty: 3,
+        example: { de: "Vollständige Bewerbungsunterlagen bestehen aus Anschreiben, Lebenslauf und Zeugnissen.", en: "Complete application documents consist of a cover letter, CV and certificates." },
+        memoryTip: "Plural only.",
+      },
+    ],
+  },
+  {
+    id: "b1-environment",
+    slug: "umwelt-nachhaltigkeit",
+    title: "Environment & sustainability",
+    titleDe: "Umwelt und Nachhaltigkeit",
+    level: "B1",
+    topic: "Society",
+    icon: "Leaf",
+    description: "Discuss climate, recycling and everyday environmental behaviour.",
+    words: [
+      {
+        id: "b1-u-1", de: "Umwelt", article: "die", plural: "—", en: "environment", ipa: "ˈʊmvɛlt", pos: "noun", level: "B1", topic: "environment", difficulty: 1,
+        example: { de: "Wir müssen die Umwelt schützen.", en: "We have to protect the environment." },
+        expressions: [{ de: "umweltfreundlich", en: "environmentally friendly" }],
+        memoryTip: "um (around) + Welt (world).",
+      },
+      {
+        id: "b1-u-2", de: "Klimawandel", article: "der", plural: "—", en: "climate change", ipa: "ˈkliːmaˌvandl̩", pos: "noun", level: "B1", topic: "environment", difficulty: 2,
+        example: { de: "Der Klimawandel betrifft uns alle.", en: "Climate change affects us all." },
+        memoryTip: "Klima + Wandel (change).",
+      },
+      {
+        id: "b1-u-3", de: "Müll trennen", en: "to separate waste", ipa: "mʏl ˈtʁɛnən", pos: "phrase", level: "B1", topic: "environment", difficulty: 2,
+        example: { de: "In Deutschland muss man den Müll trennen.", en: "In Germany you have to separate your waste." },
+        expressions: [{ de: "die Mülltonne", en: "rubbish bin" }],
+        memoryTip: "Gelber Sack, Papier, Bio, Restmüll, Glas.",
+      },
+      {
+        id: "b1-u-4", de: "Pfand", article: "das", plural: "die Pfänder", en: "deposit (on bottles)", ipa: "pfant", pos: "noun", level: "B1", topic: "environment", difficulty: 3,
+        example: { de: "Auf die Flasche gibt es 25 Cent Pfand.", en: "There's a 25-cent deposit on the bottle." },
+        memoryTip: "Return bottles to the Pfandautomat for your money back.",
+      },
+      {
+        id: "b1-u-5", de: "erneuerbar", en: "renewable", ipa: "ɛɐ̯ˈnɔɪ̯ɐbaːɐ̯", pos: "adjective", level: "B1", topic: "environment", difficulty: 3,
+        example: { de: "Deutschland setzt auf erneuerbare Energien.", en: "Germany is banking on renewable energy." },
+        memoryTip: "erneuern (to renew) + -bar (able).",
+      },
+      {
+        id: "b1-u-6", de: "verschwenden", en: "to waste", ipa: "fɛɐ̯ˈʃvɛndn̩", pos: "verb", level: "B1", topic: "environment", difficulty: 2,
+        example: { de: "Man sollte kein Wasser verschwenden.", en: "One shouldn't waste water." },
+        expressions: [{ de: "die Verschwendung", en: "waste" }],
+        memoryTip: "Inseparable ver- → no ge- in the Partizip: verschwendet.",
+      },
+      {
+        id: "b1-u-7", de: "Verkehrsmittel", article: "das", plural: "die Verkehrsmittel", en: "means of transport", ipa: "fɛɐ̯ˈkeːɐ̯sˌmɪtl̩", pos: "noun", level: "B1", topic: "environment", difficulty: 2,
+        example: { de: "Öffentliche Verkehrsmittel sind umweltfreundlicher als das Auto.", en: "Public transport is greener than the car." },
+        memoryTip: "Verkehr (traffic) + Mittel (means).",
+      },
+      {
+        id: "b1-u-8", de: "Auswirkung", article: "die", plural: "die Auswirkungen", en: "impact, effect", ipa: "ˈaʊsˌvɪʁkʊŋ", pos: "noun", level: "B1", topic: "environment", difficulty: 3,
+        example: { de: "Das hat große Auswirkungen auf die Wirtschaft.", en: "That has a major impact on the economy." },
+        synonyms: ["die Folge", "der Effekt"],
+        memoryTip: "Auswirkungen auf + Akkusativ.",
+      },
+    ],
+  },
+  {
+    id: "b1-media",
+    slug: "medien-technik",
+    title: "Media & technology",
+    titleDe: "Medien und Technik",
+    level: "B1",
+    topic: "Media",
+    icon: "Smartphone",
+    description: "Talk about news, social media, devices and digital habits.",
+    words: [
+      {
+        id: "b1-m-1", de: "Nachricht", article: "die", plural: "die Nachrichten", en: "message / news", ipa: "ˈnaːxʁɪçt", pos: "noun", level: "B1", topic: "media", difficulty: 1,
+        example: { de: "Ich schaue jeden Abend die Nachrichten.", en: "I watch the news every evening." },
+        memoryTip: "Singular = message, plural = the news.",
+      },
+      {
+        id: "b1-m-2", de: "Bildschirm", article: "der", plural: "die Bildschirme", en: "screen", ipa: "ˈbɪltʃɪʁm", pos: "noun", level: "B1", topic: "media", difficulty: 2,
+        example: { de: "Ich arbeite acht Stunden am Bildschirm.", en: "I work eight hours at a screen." },
+        memoryTip: "Bild (image) + Schirm (shield).",
+      },
+      {
+        id: "b1-m-3", de: "herunterladen", en: "to download", ipa: "hɛˈʁʊntɐˌlaːdn̩", pos: "verb", level: "B1", topic: "media", difficulty: 2,
+        example: { de: "Ich habe die App heruntergeladen.", en: "I downloaded the app." },
+        opposites: ["hochladen"],
+        memoryTip: "Separable: Ich lade die Datei herunter.",
+      },
+      {
+        id: "b1-m-4", de: "Datenschutz", article: "der", plural: "—", en: "data protection", ipa: "ˈdaːtn̩ˌʃʊt͡s", pos: "noun", level: "B1", topic: "media", difficulty: 3,
+        example: { de: "Datenschutz ist in Deutschland ein wichtiges Thema.", en: "Data protection is an important topic in Germany." },
+        memoryTip: "Daten + Schutz (protection).",
+      },
+      {
+        id: "b1-m-5", de: "Werbung", article: "die", plural: "die Werbungen", en: "advertising", ipa: "ˈvɛʁbʊŋ", pos: "noun", level: "B1", topic: "media", difficulty: 2,
+        example: { de: "Die Werbung im Internet nervt mich.", en: "Internet advertising annoys me." },
+        memoryTip: "werben (to advertise) → die Werbung.",
+      },
+      {
+        id: "b1-m-6", de: "zuverlässig", en: "reliable", ipa: "ˈt͡suːfɛɐ̯ˌlɛsɪç", pos: "adjective", level: "B1", topic: "media", difficulty: 3,
+        example: { de: "Diese Quelle ist nicht besonders zuverlässig.", en: "This source isn't especially reliable." },
+        opposites: ["unzuverlässig"],
+        memoryTip: "sich verlassen auf (to rely on).",
+      },
+      {
+        id: "b1-m-7", de: "Quelle", article: "die", plural: "die Quellen", en: "source", ipa: "ˈkvɛlə", pos: "noun", level: "B1", topic: "media", difficulty: 2,
+        example: { de: "Prüfen Sie immer die Quelle einer Information.", en: "Always check the source of a piece of information." },
+        memoryTip: "Also means a water spring.",
+      },
+      {
+        id: "b1-m-8", de: "sich informieren", en: "to inform oneself", ipa: "zɪç ɪnfɔʁˈmiːʁən", pos: "verb", level: "B1", topic: "media", difficulty: 2,
+        example: { de: "Ich informiere mich online über aktuelle Themen.", en: "I inform myself about current topics online." },
+        memoryTip: "sich informieren über + Akkusativ.",
+      },
+    ],
+  },
+  {
+    id: "b1-feelings",
+    slug: "gefuehle-charakter",
+    title: "Feelings & character",
+    titleDe: "Gefühle und Charakter",
+    level: "B1",
+    topic: "People",
+    icon: "Smile",
+    description: "Express emotions precisely and describe personalities.",
+    words: [
+      {
+        id: "b1-g-1", de: "stolz", en: "proud", ipa: "ʃtɔlt͡s", pos: "adjective", level: "B1", topic: "feelings", difficulty: 2,
+        example: { de: "Ich bin stolz auf meine Fortschritte.", en: "I'm proud of my progress." },
+        memoryTip: "stolz auf + Akkusativ.",
+      },
+      {
+        id: "b1-g-2", de: "enttäuscht", en: "disappointed", ipa: "ɛntˈtɔɪ̯ʃt", pos: "adjective", level: "B1", topic: "feelings", difficulty: 2,
+        example: { de: "Ich war von dem Ergebnis enttäuscht.", en: "I was disappointed by the result." },
+        expressions: [{ de: "die Enttäuschung", en: "disappointment" }],
+        memoryTip: "ent- + täuschen (to deceive) — the illusion ends.",
+      },
+      {
+        id: "b1-g-3", de: "aufgeregt", en: "excited, nervous", ipa: "ˈaʊfɡəˌʁeːkt", pos: "adjective", level: "B1", topic: "feelings", difficulty: 2,
+        example: { de: "Vor der Prüfung war ich sehr aufgeregt.", en: "Before the exam I was very nervous." },
+        synonyms: ["nervös"],
+        memoryTip: "sich aufregen = to get worked up.",
+      },
+      {
+        id: "b1-g-4", de: "zuverlässig", en: "dependable", ipa: "ˈt͡suːfɛɐ̯ˌlɛsɪç", pos: "adjective", level: "B1", topic: "feelings", difficulty: 2,
+        example: { de: "Sie ist eine zuverlässige Kollegin.", en: "She is a dependable colleague." },
+        opposites: ["unzuverlässig"],
+        memoryTip: "The number one adjective in German job references.",
+      },
+      {
+        id: "b1-g-5", de: "geduldig", en: "patient", ipa: "ɡəˈdʊldɪç", pos: "adjective", level: "B1", topic: "feelings", difficulty: 2,
+        example: { de: "Als Lehrer muss man geduldig sein.", en: "As a teacher you have to be patient." },
+        opposites: ["ungeduldig"],
+        memoryTip: "die Geduld = patience.",
+      },
+      {
+        id: "b1-g-6", de: "sich ärgern", en: "to be annoyed", ipa: "zɪç ˈɛʁɡɐn", pos: "verb", level: "B1", topic: "feelings", difficulty: 2,
+        example: { de: "Ich ärgere mich über die Verspätung.", en: "I'm annoyed about the delay." },
+        memoryTip: "sich ärgern über + Akkusativ.",
+      },
+      {
+        id: "b1-g-7", de: "Selbstbewusstsein", article: "das", plural: "—", en: "self-confidence", ipa: "ˈzɛlpstbəˌvʊstzaɪn", pos: "noun", level: "B1", topic: "feelings", difficulty: 3,
+        example: { de: "Sprachkurse stärken das Selbstbewusstsein.", en: "Language courses strengthen self-confidence." },
+        memoryTip: "selbst + bewusst + sein.",
+      },
+      {
+        id: "b1-g-8", de: "hilfsbereit", en: "helpful", ipa: "ˈhɪlfsbəˌʁaɪt", pos: "adjective", level: "B1", topic: "feelings", difficulty: 2,
+        example: { de: "Meine Nachbarn sind sehr hilfsbereit.", en: "My neighbours are very helpful." },
+        memoryTip: "Hilfe + bereit (ready).",
+      },
+    ],
+  },
+];
