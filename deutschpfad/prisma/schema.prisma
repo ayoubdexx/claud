@@ -1,0 +1,324 @@
+// DeutschPfad database schema
+// Postgres (Supabase compatible). Run: npx prisma migrate dev
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum Level {
+  A1
+  A2
+  B1
+  B2
+}
+
+enum LessonStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  image         String?
+  role          Role      @default(STUDENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile      Profile?
+  progress     LessonProgressRecord[]
+  cards        SrsCardRecord[]
+  notes        Note[]
+  bookmarks    Bookmark[]
+  plannerTasks PlannerTask[]
+  attempts     ExamAttempt[]
+  writings     WritingSubmission[]
+  speaking     SpeakingResult[]
+  sessions     StudySession[]
+  memberships  GroupMember[]
+  posts        Post[]
+  comments     Comment[]
+  authSessions AuthSession[]
+  accounts     Account[]
+  tokens       VerificationToken[]
+}
+
+model Profile {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentLevel      Level     @default(A1)
+  targetLevel       Level     @default(B2)
+  dailyGoalMinutes  Int       @default(30)
+  examDate          DateTime?
+  country           String?
+  motivation        String?
+  xp                Int       @default(0)
+  streak            Int       @default(0)
+  longestStreak     Int       @default(0)
+  voiceURI          String?
+  playbackRate      Float     @default(1)
+  showTranslations  Boolean   @default(true)
+  theme             String    @default("system")
+  updatedAt         DateTime  @updatedAt
+}
+
+model LessonProgressRecord {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonSlug   String
+  status       LessonStatus @default(IN_PROGRESS)
+  score        Int?
+  secondsSpent Int          @default(0)
+  lastBlock    Int          @default(0)
+  completedAt  DateTime?
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([userId, lessonSlug])
+  @@index([userId])
+}
+
+model SrsCardRecord {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wordId       String
+  deck         String
+  ease         Float    @default(2.5)
+  interval     Int      @default(0)
+  repetitions  Int      @default(0)
+  lapses       Int      @default(0)
+  due          DateTime @default(now())
+  favorite     Boolean  @default(false)
+  suspended    Boolean  @default(false)
+  lastReviewed DateTime?
+
+  @@unique([userId, wordId, deck])
+  @@index([userId, due])
+}
+
+model Note {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  folder     String   @default("Allgemein")
+  content    String
+  tags       String[]
+  lessonSlug String?
+  pinned     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    String
+  kind      String
+  title     String
+  href      String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, itemId])
+}
+
+model PlannerTask {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date     DateTime
+  title    String
+  kind     String   @default("custom")
+  minutes  Int      @default(30)
+  done     Boolean  @default(false)
+  href     String?
+
+  @@index([userId, date])
+}
+
+model ExamAttempt {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examSlug      String
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+  totalPercent  Int      @default(0)
+  passed        Boolean  @default(false)
+  sectionScores Json
+  answers       Json
+
+  @@index([userId, examSlug])
+}
+
+model WritingSubmission {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskSlug  String
+  text      String
+  score     Int      @default(0)
+  feedback  Json?
+  teacherId String?
+  teacherComment String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, taskSlug])
+}
+
+model SpeakingResult {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskSlug   String
+  itemId     String
+  score      Float
+  transcript String
+  createdAt  DateTime @default(now())
+
+  @@index([userId, taskSlug])
+}
+
+model StudySession {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date    DateTime
+  minutes Int      @default(0)
+  xp      Int      @default(0)
+  lessons Int      @default(0)
+  cards   Int      @default(0)
+
+  @@unique([userId, date])
+}
+
+model StudyGroup {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  level       Level         @default(A1)
+  visibility  String        @default("public")
+  code        String        @unique
+  createdAt   DateTime      @default(now())
+  members     GroupMember[]
+  challenges  GroupChallenge[]
+  posts       Post[]
+}
+
+model GroupMember {
+  id       String     @id @default(cuid())
+  groupId  String
+  group    StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role       @default(STUDENT)
+  joinedAt DateTime   @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model GroupChallenge {
+  id       String     @id @default(cuid())
+  groupId  String
+  group    StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  title    String
+  goal     Int
+  unit     String     @default("minutes")
+  progress Int        @default(0)
+  endsAt   DateTime
+}
+
+model Post {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId   String?
+  group     StudyGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  category  String      @default("general")
+  title     String
+  body      String
+  level     Level?
+  pinned    Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  comments  Comment[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+  hidden    Boolean  @default(false)
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  level     Level?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String
+  token     String   @unique
+  type      String   @default("email-verification")
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+/* NextAuth compatible tables (kept for future OAuth providers) */
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+}
+
+model AuthSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+}

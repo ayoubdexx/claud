@@ -1,0 +1,233 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 24% 11%;
+    --surface: 220 25% 98%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 24% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 24% 11%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 96%;
+    --secondary-foreground: 222 24% 16%;
+
+    --muted: 220 20% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 69% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 35 92% 48%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 16% 90%;
+    --input: 220 16% 88%;
+    --ring: 221 83% 53%;
+
+    --level-a1: 152 60% 42%;
+    --level-a2: 199 89% 45%;
+    --level-b1: 262 74% 58%;
+    --level-b2: 22 90% 52%;
+
+    --radius: 0.875rem;
+  }
+
+  .dark {
+    --background: 224 24% 6%;
+    --foreground: 220 20% 96%;
+    --surface: 224 22% 9%;
+
+    --card: 224 22% 9%;
+    --card-foreground: 220 20% 96%;
+
+    --popover: 224 24% 10%;
+    --popover-foreground: 220 20% 96%;
+
+    --primary: 213 94% 62%;
+    --primary-foreground: 224 40% 8%;
+
+    --secondary: 223 16% 15%;
+    --secondary-foreground: 220 20% 96%;
+
+    --muted: 223 16% 15%;
+    --muted-foreground: 220 12% 65%;
+
+    --accent: 258 90% 68%;
+    --accent-foreground: 224 40% 8%;
+
+    --destructive: 0 72% 58%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 45%;
+    --success-foreground: 224 40% 8%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 224 40% 8%;
+
+    --border: 223 14% 18%;
+    --input: 223 14% 22%;
+    --ring: 213 94% 62%;
+
+    --level-a1: 152 55% 48%;
+    --level-a2: 199 85% 55%;
+    --level-b1: 262 74% 66%;
+    --level-b2: 22 88% 58%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    @apply bg-primary/20;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-[-0.02em];
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-background/72 backdrop-blur-xl backdrop-saturate-150;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 ease-apple hover:-translate-y-0.5 hover:shadow-lift;
+  }
+
+  .prose-de {
+    @apply text-[15px] leading-7 text-foreground/90;
+  }
+
+  .prose-de p + p {
+    @apply mt-3;
+  }
+
+  .prose-de strong {
+    @apply font-semibold text-foreground;
+  }
+
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scroll-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scroll-slim::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+
+  .grid-bg {
+    background-image:
+      radial-gradient(hsl(var(--border)) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .de-table {
+    @apply w-full overflow-hidden text-left text-sm;
+  }
+
+  .de-table thead th {
+    @apply bg-muted/70 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground;
+  }
+
+  .de-table tbody td {
+    @apply border-t border-border px-3 py-2.5 align-top;
+  }
+
+  .de-table tbody tr:hover {
+    @apply bg-muted/40;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* ---------- Print / PDF-quality styles for worksheets ---------- */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11.5pt;
+  }
+
+  .no-print,
+  nav[data-app-nav],
+  header[data-app-header],
+  aside[data-app-sidebar] {
+    display: none !important;
+  }
+
+  .print-page {
+    break-after: page;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+
+  .de-table thead th {
+    background: #f1f5f9 !important;
+    color: #000 !important;
+  }
+}
